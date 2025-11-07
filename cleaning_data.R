@@ -120,6 +120,8 @@ clean_location <- raw_location %>%
     site == "diani_reef_2" ~ "diani_reef",
     
     # Fix Coral Garden variants
+    site == "coral_garden_malindi" ~ "malindi_coral_garden",
+    site == "coral_garden" ~ "mombasa_coral_garden",
     site == "coral_garden_watamu" ~ "watamu_coral_garden",
     
     TRUE ~ site

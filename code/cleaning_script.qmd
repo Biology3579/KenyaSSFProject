@@ -42,7 +42,7 @@ library(dplyr)      # ...
 renv::restore()
 ```
 
-## Load data 
+## Load data
 
 ### 2009-2016 data
 
@@ -57,10 +57,12 @@ This is ...
 fish_abund_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_fish_abund.csv"))
 master_location_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_master_location.csv"))
 dive_details_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_dive_details.csv"))
+fish_groupings <- read.csv(here("raw_data","fish_groupings_samoilys_2018.csv"))
 
 ```
 
 ### 2018-2023 data
+
 This is ...
 
 ```{r}
@@ -101,6 +103,7 @@ explore_data_structure(dive_details_2018_raw, "DIVE DETAILS 2018-2023")
 ## Cleaning data
 
 ### Clean fish abundance data
+
 ...
 
 ```{r}
@@ -164,6 +167,7 @@ clean_fish_2018 <- fish_abund_2018_raw %>%
 ```
 
 ### Clean location data
+
 ...
 
 ```{r}
@@ -238,6 +242,7 @@ clean_location_2018 <- master_location_2018_raw %>%
 ```
 
 ### Clean dive data
+
 ...
 
 ```{r}
@@ -299,7 +304,9 @@ clean_dive_details_2018 <- dive_details_2018_raw %>%
 ```
 
 ## Verify cleaning
+
 ...
+
 ```{r}
 #| label: verify cleaning process
 #| warning: false
@@ -320,7 +327,8 @@ explore_data_structure(clean_dive_details_2018, "CLEANED DIVE DETAILS 2018-2023"
 
 ```
 
-## Save clean data 
+## Save clean data
+
 ...
 
 ```{r}
@@ -340,6 +348,4 @@ write_csv(clean_dive_details_2018, here("processed_data", "clean_dive_details_20
 
 ```
 
-
-# renv::snapshot() - run when all the packages are loaded 
-
+#### renv::snapshot() - run when all the packages are loaded

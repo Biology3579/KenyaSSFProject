@@ -6,16 +6,19 @@ format: html
 editor: visual
 ---
 
-## Packages
+## R Set-up
 
 Load the necessary packages (these can be found in ...)
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
 
 Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
 
 ```{r}
+#| label: r set-up
 #| echo: false
 #| include: false
-renv::init() #renv file for reproducibility 
+# renv::init() #renv file for reproducibility 
 
 # Install Packages -> BAD CODE (delete once renv snapshot)
 install.packages("lubridate")
@@ -32,12 +35,7 @@ library(janitor)    # Clean column names to lowercase snake_case
 library(lubridate)  # Parse and manipulate dates easily
 library(dplyr)      # ...
 
-#renv::snapshot() - run when all the packages are loaded 
-
-
 ```
-
-*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
 
 ```{r}
 #| label: renv-restore
@@ -53,6 +51,7 @@ This is ...
 ```{r}
 #| label: load 2009-2016 data
 #| echo: false
+#| warning: false
 
 # Load 2009-2016 data 
 fish_abund_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_fish_abund.csv"))
@@ -342,5 +341,5 @@ write_csv(clean_dive_details_2018, here("processed_data", "clean_dive_details_20
 ```
 
 
-
+# renv::snapshot() - run when all the packages are loaded 
 

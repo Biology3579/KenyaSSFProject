@@ -1,0 +1,219 @@
+---
+title: "merging_additional_data"
+author: "Candela Ferrer Diez"
+date: 2025-11-06
+format: 
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+    theme: cosmo
+    embed-resources: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+## R Set-up
+
+Load the necessary packages (these can be found in ...)
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load packages -> BAD CODE (delete once renv snapshot)
+library(sf)           # For spatial data handling
+library(dplyr)        # For data manipulation
+library(terra)        # Alternative for raster operations (if needed)
+library(here)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+#| label: renv-restore
+renv::restore()
+```
+
+# Adding Human Gravity
+
+## Location data
+We will be adding the merged data to the master lcoation - as this contians..
+
+### Load cleaned data
+...
+
+```{r}
+#| label: load location data
+#| echo: false
+#| warning: false
+
+##load location data
+clean_location_2018 <- read.csv(here::here("processed_data","clean_location_2018.csv"))
+
+```
+
+### Convert to Spatial Format
+
+Transform the location data into a spatial object (simple features) to enable spatial operations and joins with the gravity data.
+```{r}
+#| label: convert-to-spatial
+#| echo: false
+#| warning: false
+
+
+# Convert to sf object with WGS84 coordinate system
+sites_sf <- st_as_sf(clean_location_2018, 
+                     coords = c("longitude", "latitude"),
+                     crs = 4326,  # WGS84
+                     remove = FALSE)  # Keep original lon/lat columns
+
+```
+
+## Gravity Data
+
+### Load Gravity Data
+
+Load the human gravity shapefile which contains modeled human pressure on coral reefs based on population density and accessibility within a 500 km radius.
+... (more about this)
+
+```{r}
+#| label: load-gravity-data
+#| echo: false
+#| warning: false
+
+# Load the shapefile
+gravity_data <- st_read(here::here("raw_data", "Total Gravity of Coral Reefs 1.0.shp"))
+
+# Check the structure
+glimpse(gravity_data)
+
+```
+
+### Clean Gravity Data
+Standardise column names to match the celaned data
+```{r}
+#| label: clean-gravity-data
+#| echo: false
+#| warning: false
+
+# Clean gravity data
+clean_gravity_data <- clean_column_names(gravity_data)
+
+```
+
+### Extract Gravity Values
+
+Match each survey site to the nearest gravity grid cell and extract the human pressure values.
+I will be doing this through a spatial join by finding the nearest gravity grid cell for each cell - For each site in sites_sf, find the nearest polygon in gravity_data and copy all its attributes (reef_id, grav_tot) to that site's row
+
+```{r}
+#| label: extract-gravity
+#| echo: false
+#| warning: false
+
+# Switch from spherical (S2) to planar geometry calculations
+sf_use_s2(FALSE) 
+
+# Spatial join - attach gravity data to each survey site
+sites_with_gravity <- st_join(sites_sf, 
+              clean_gravity_data,
+              join = st_nearest_feature) # Match to nearest grid cell
+
+# Calculate how far each site is from its matched grid cell
+# This helps assess match quality (closer = better)
+nearest_indices <- st_nearest_feature(sites_sf, clean_gravity_data)
+
+# Calculate the distance between each site and its matched grid cell
+distances <- st_distance(sites_sf,
+                        clean_gravity_data[nearest_indices, ],  
+                        by_element = TRUE)
+
+# Add distance as a new column (to be able to check matches)
+sites_with_gravity$distance_to_grid_km <- as.numeric(distances) / 1000
+
+# Convert to dataframe and organize columns
+results <- sites_with_gravity %>%
+  mutate(distance_to_grid_km = as.numeric(distances) / 1000) %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    date, station, site, location, country, 
+    latitude, longitude,
+    contains("grav"),  # All gravity-related columns
+    distance_to_grid_km,
+    everything()
+  )
+
+```
+
+### Checking results
+
+Convert the spatial object back to a regular dataframe and organize columns for easier interpretation.
+```{r}
+#| label: check-results
+
+# Check for any sites without gravity values
+missing_gravity <- results %>%
+  filter(is.na(grav_tot))  # Use lowercase after clean_column_names
+
+if(nrow(missing_gravity) > 0) {
+  print(paste("⚠ Warning:", nrow(missing_gravity), "sites missing gravity values"))
+  print(missing_gravity %>% select(station, site, location))
+} else {
+  print("All sites successfully matched with gravity values")
+}
+```
+
+# Adding Management Data
+
+
+
+
+
+
+
+# Save data  
+... 
+
+```{r}
+
+# ============================================================
+# STEP 7: EXPORT RESULTS (to be mofidied)
+# ============================================================
+
+# Export full results
+write.csv(results, 
+          "clean_location_2018_with_gravity.csv", 
+          row.names = FALSE)
+
+# Export summaries
+write.csv(country_summary, 
+          "gravity_summary_by_country.csv", 
+          row.names = FALSE)
+
+write.csv(location_summary, 
+          "gravity_summary_by_location.csv", 
+          row.rows = FALSE)
+
+# Save as spatial file if needed for GIS
+st_write(sites_with_gravity, 
+         "sites_with_gravity.shp", 
+         delete_dsn = TRUE)  # Overwrite if exists
+
+print("\n✓ All results exported successfully!")
+print("Files created:")
+print("  - clean_location_2018_with_gravity.csv")
+print("  - gravity_summary_by_country.csv")
+print("  - gravity_summary_by_location.csv")
+print("  - sites_with_gravity.shp (and associated files)")
+
+
+```

@@ -6,21 +6,30 @@
 
 library(dplyr)
 library(stringr)
+library(here)
+
+renv::
+
+#Load data
+
+clean_fish_2009 <- read.csv(here("processed_data","clean_fish_2009.csv"))
+clean_fish_2018 <- read.csv(here("processed_data","clean_fish_2018.csv"))
+fish_groups <-  read.csv(here("raw_data","fish_groupings_samoilys_2018.csv"))
 
 # Check unique standardized Species names (using Species_new)
-unique_species_2009 <- fish_abund_2009_raw %>%
-  filter(Country == "Kenya") %>% 
+unique_species_2009 <- clean_fish_2009 %>%
+  filter(country == "kenya") %>% 
   mutate(
-    standard_species = str_to_lower(str_trim(Species_new))
+    standard_species = str_to_lower(str_trim(species_new))
   ) %>%
   distinct(standard_species) %>%
   arrange(standard_species)
 
 # Check unique standardized Family names
-unique_family_2009 <- fish_abund_2009_raw %>%
-  filter(Country == "Kenya") %>% 
+unique_family_2009 <- clean_fish_2009 %>%
+  filter(country == "kenya") %>% 
   mutate(
-    standard_family = str_to_lower(str_trim(Family))
+    standard_family = str_to_lower(str_trim(family))
   ) %>%
   distinct(standard_family) %>%
   arrange(standard_family)
@@ -33,19 +42,19 @@ print(unique_family_2009)
 
 
 # Check unique standardized Species names
-unique_species_2018 <- fish_abund_2018_raw %>%
-  filter(Country == "Kenya") %>% 
+unique_species_2018 <- clean_fish_2018 %>%
+  filter(country == "kenya") %>% 
   mutate(
-    standard_species = str_to_lower(str_trim(Species))
+    standard_species = str_to_lower(str_trim(species))
   ) %>%
   distinct(standard_species) %>%
   arrange(standard_species)
 
 # Check unique standardized Family names
-unique_family_2018 <- fish_abund_2018_raw %>%
-  filter(Country == "Kenya") %>% 
+unique_family_2018 <- clean_fish_2018 %>%
+  filter(country == "kenya") %>% 
   mutate(
-    standard_family = str_to_lower(str_trim(Family))
+    standard_family = str_to_lower(str_trim(family))
   ) %>%
   distinct(standard_family) %>%
   arrange(standard_family)

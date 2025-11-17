@@ -65,6 +65,7 @@ clean_dive_details_2009 <- read.csv(here("processed_data","clean_dive_details_20
 ```
 
 ### Site Observations Map
+
 ...
 
 ```{r}
@@ -206,7 +207,6 @@ print(head(species_per_site_2009))
 
 ```
 
-
 ## 2018-2023 data
 
 ### Load data
@@ -224,8 +224,8 @@ clean_dive_details_2018 <- read.csv(here("processed_data","clean_dive_details_20
 
 ```
 
-
 ### Site Observations Map
+
 ...
 
 ```{r}
@@ -368,3 +368,109 @@ print(head(species_per_site_2018))
 ```
 
 
+# Human Gravity Exploration
+
+
+## Summary Statistics
+
+Calculate summary statistics of human gravity values by country and location to understand pressure patterns across study regions.
+```{r}
+#| label: summary-statistics
+
+# Summary by country
+country_summary %
+  group_by(country) %>%
+  summarise(
+    n_stations = n(),
+    n_sites = n_distinct(site),
+    n_locations = n_distinct(location),
+    mean_gravity = mean(Grav_tot, na.rm = TRUE),
+    median_gravity = median(Grav_tot, na.rm = TRUE),
+    min_gravity = min(Grav_tot, na.rm = TRUE),
+    max_gravity = max(Grav_tot, na.rm = TRUE),
+    sd_gravity = sd(Grav_tot, na.rm = TRUE)
+  )
+
+print("Summary by Country:")
+print(country_summary)
+
+```
+
+
+# Identify highest pressure sites
+top_pressure %
+  dplyr::arrange(dplyr::desc(Grav_tot)) %>%
+  dplyr::select(station, site, location, country, Grav_tot, latitude, longitude) %>%
+  dplyr::slice_head(n = 10)
+
+print("\n10 Highest Pressure Sites:")
+print(top_pressure)
+```
+
+## Visualizations
+
+Create maps and plots to visualize the distribution of human pressure across survey sites.
+
+### Map of Sites by Human Gravity
+```{r}
+#| label: map-plot
+#| fig-width: 10
+#| fig-height: 8
+
+# Map of sites colored by gravity
+map_plot <- ggplot() +
+  geom_sf(data = sites_with_gravity, 
+          aes(color = Grav_tot), 
+          size = 3, alpha = 0.7) +
+  scale_color_viridis_c(name = "Human\nGravity", 
+                        option = "plasma") +
+  facet_wrap(~country) +
+  theme_minimal() +
+  labs(title = "Human Gravity at Study Sites",
+       subtitle = "Darker colors = higher human pressure")
+
+print(map_plot)
+```
+
+### Distribution by Location
+```{r}
+#| label: boxplot
+#| fig-width: 10
+#| fig-height: 6
+
+# Boxplot of gravity distribution by location
+boxplot <- ggplot(results, aes(x = reorder(location, Grav_tot, median), 
+                               y = Grav_tot, 
+                               fill = country)) +
+  geom_boxplot() +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Human Gravity Distribution by Location",
+       x = "Location", 
+       y = "Total Gravity (500 km radius)",
+       fill = "Country")
+
+print(boxplot)
+```
+
+### Distance to Nearest Grid Cell
+```{r}
+#| label: distance-check
+#| fig-width: 8
+#| fig-height: 5
+
+# Check distance to nearest grid cell
+distance_check <- ggplot(results, aes(x = distance_to_grid_km)) +
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = 5, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Distance from Sites to Nearest Gravity Grid Cell",
+       subtitle = "Red line = 5 km (half the grid size)",
+       x = "Distance (km)",
+       y = "Number of sites")
+
+print(distance_check)
+```
+
+
+```

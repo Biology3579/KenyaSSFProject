@@ -1,5 +1,5 @@
 ---
-title: "cleaning_data"
+title: "cleaning_script_2018"
 author: "Candela Ferrer Diez"
 date: 2025-11-06
 format: html
@@ -18,7 +18,6 @@ Use the renv::restore() to load up the necessary package versions along with the
 #| label: r set-up
 #| echo: false
 #| include: false
-# renv::init() #renv file for reproducibility 
 
 # Install Packages -> BAD CODE (delete once renv snapshot)
 install.packages("lubridate")
@@ -43,23 +42,6 @@ renv::restore()
 ```
 
 ## Load data
-
-### 2009-2016 data
-
-This is ...
-
-```{r}
-#| label: load 2009-2016 data
-#| echo: false
-#| warning: false
-
-# Load 2009-2016 data 
-fish_abund_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_fish_abund.csv"))
-master_location_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_master_location.csv"))
-dive_details_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_dive_details.csv"))
-fish_groupings <- read.csv(here("raw_data","fish_groupings_samoilys_2018.csv"))
-
-```
 
 ### 2018-2023 data
 
@@ -86,12 +68,7 @@ dive_details_2018_raw <- read.csv(here("raw_data","cordio_2018_2023_dive_details
 #| message: false
 
 # Source structure exploration function
-source(here::here("functions", "cleaning_&_processing.R"))
-
-# Explore 2009-2016 datasets
-explore_data_structure(fish_abund_2009_raw, "FISH ABUNDANCE 2009-2016")
-explore_data_structure(master_location_2009_raw, "LOCATION 2009-2016")
-explore_data_structure(dive_details_2009_raw, "DIVE DETAILS 2009-2016")
+source(here::here("functions", "cleaning_and_processing.R"))
 
 # Explore 2018-2023 datasets
 explore_data_structure(fish_abund_2018_raw, "FISH ABUNDANCE 2018-2023")
@@ -112,34 +89,11 @@ explore_data_structure(dive_details_2018_raw, "DIVE DETAILS 2018-2023")
 #| message: false
 
 # Source cleaning functions
-source(here::here("functions", "cleaning_&_processing.R"))
-
-# 2009-2016
-clean_fish_2009 <- fish_abund_2009_raw %>%
-  clean_column_names() %>%
-  drop_columns(drop_cols = c("species_old", "notes", "note_on_analysis", "x")) %>%
-  # standardise the textual columns
-  standardize_text(c("site", "station", "country", "location", "family", "species_new", "taxon_group", "functional_group")) %>% 
-  convert_column_types(
-    date_cols = intersect(c("date"), names(.)),
-    #columns that should be integers
-    integer_cols = intersect(
-      c("ts_no", "number"),
-      names(.)
-    ),
-    # columns that should be numeric
-    numeric_cols = intersect(
-      c("size_class", "l", "a", "b", "weight_g", "tot_wt_g"),
-      names(.)
-    ),
-    # columns that should be factors (categorical)
-    factor_cols = intersect(c("country", "location", "site", "station", "family", "taxon_group", "functional_group"), names(.))
-  ) 
+source(here::here("functions", "cleaning_and_processing.R"))
 
 # 2018-2023
 clean_fish_2018 <- fish_abund_2018_raw %>%
   clean_column_names() %>%
-  drop_columns(drop_cols = c("x", "x_1", "x_2","x_3")) %>%
   # standardise only the textual ID-like columns
   standardize_text(c("site", "station", "country", "family", "species", "trophic_groups")) %>%
   convert_column_types(
@@ -176,38 +130,7 @@ clean_fish_2018 <- fish_abund_2018_raw %>%
 #| message: false
 
 # Source cleaning functions
-source(here::here("functions", "cleaning_&_processing.R"))
-
-# 2009-2016
-clean_location_2009 <- master_location_2009_raw %>%
-  clean_column_names() %>%
-  drop_columns(drop_cols = c("reeftype_old",        
-                "extra_notes_for_missing_data"  )) %>%
-                 
-  # standardise textual columns
-  standardize_text(c("station", "site", "location",
-      "country", "orientation", "geology",
-      "reef_geomorphology", "reef_type")) %>% 
-  convert_column_types(
-    date_cols = intersect(c("date"), names(.)),
-    
-    #columns that should be integers
-    integer_cols = intersect(
-      c("exposure"), names(.)),
-    
-    # columns that should be numeric
-    numeric_cols = intersect(
-      c("latitude", "longitude"), names(.)),
-    
-    # columns that should be factors (categorical)
-    factor_cols = intersect(c("station", "site", 
-      "location", "country", "orientation", "geology",
-      "reef_geomorphology", "reef_type"), names(.))) %>%
-    
-  # validate coordinates
-  { if(all(c("latitude","longitude") %in% names(.)))
-    fix_coordinates(., lat_col = "latitude", lon_col =
-                      "longitude") else . }
+source(here::here("functions", "cleaning_and_processing.R"))
 
 # 2018-2023
 clean_location_2018 <- master_location_2018_raw %>%
@@ -251,30 +174,7 @@ clean_location_2018 <- master_location_2018_raw %>%
 #| message: false
 
 # Source cleaning function
-source(here::here("functions", "cleaning_&_processing.R"))
-
-# 2009-2016
-clean_dive_details_2009 <- dive_details_2009_raw %>%
-  clean_column_names() %>%
-  drop_columns(drop_cols = c("dive_time", "other_notes",
-                "other_notes_1")) %>%
-  # standardise only the textual ID-like columns
-  standardize_text(c("station", "site", 
-        "depth_categories", "assoc_habitats")) %>% 
-  convert_column_types(
-    date_cols = intersect(c("date"), names(.)),
-    
-    #columns that should be integers
-    integer_cols = NULL,
-    
-    # columns that should be numeric
-    numeric_cols = intersect(
-      c("max_depth_m", "min_depth_m", "rugosity"),
-      names(.)),
-    
-    # columns that should be factors (categorical)
-    factor_cols = intersect(c("station", "site",
-      "depth_categories", "assoc_habitats"), names(.))) 
+source(here::here("functions", "cleaning_and_processing.R"))
 
 # 2018-2023
 clean_dive_details_2018 <- dive_details_2018_raw %>%
@@ -313,12 +213,7 @@ clean_dive_details_2018 <- dive_details_2018_raw %>%
 #| message: false
 
 # Source cleaning function
-source(here::here("functions", "cleaning_&_processing.R"))
-
-# Explore cleaned 2009-2016 data
-explore_data_structure(clean_fish_2009, "CLEANED FISH ABUNDANCE 2009-2016")
-explore_data_structure(clean_location_2009, "CLEANED LOCATION 2009-2016")
-explore_data_structure(clean_dive_details_2009, "CLEANED DIVE DETAILS 2009-2016")
+source(here::here("functions", "cleaning_and_processing.R"))
 
 # Explore cleaned 2018-2023 datasets data
 explore_data_structure(clean_fish_2018, "CLEANED FISH ABUNDANCE 2018-2023")
@@ -336,10 +231,6 @@ explore_data_structure(clean_dive_details_2018, "CLEANED DIVE DETAILS 2018-2023"
 #| warning: false
 #| message: false
 
-# 2009-2016
-write_csv(clean_fish_2009, here("processed_data", "clean_fish_2009.csv"))
-write_csv(clean_location_2009, here("processed_data", "clean_location_2009.csv"))
-write_csv(clean_dive_details_2009, here("processed_data", "clean_dive_details_2009.csv"))
 
 # 2018-2023
 write_csv(clean_fish_2018, here("processed_data", "clean_fish_2018.csv"))

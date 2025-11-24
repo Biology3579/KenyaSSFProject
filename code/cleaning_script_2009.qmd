@@ -70,7 +70,7 @@ fish_groupings <- read.csv(here("raw_data","fish_groupings_samoilys_2018.csv"))
 #| message: false
 
 # Source structure exploration function
-source(here::here("functions", "cleaning_and_processing.R"))
+source(here::here("functions", "cleaning.R"))
 
 # Explore 2009-2016 datasets
 explore_data_structure(fish_abund_2009_raw, "FISH ABUNDANCE 2009-2016")
@@ -91,7 +91,7 @@ explore_data_structure(dive_details_2009_raw, "DIVE DETAILS 2009-2016")
 #| message: false
 
 # Source cleaning functions
-source(here::here("functions", "cleaning_and_processing.R"))
+source(here::here("functions", "cleaning.R"))
 
 # 2009-2016
 clean_fish_2009 <- fish_abund_2009_raw %>%
@@ -127,7 +127,7 @@ clean_fish_2009 <- fish_abund_2009_raw %>%
 #| message: false
 
 # Source cleaning functions
-source(here::here("functions", "cleaning_and_processing.R"))
+source(here::here("functions", "cleaning.R"))
 
 # 2009-2016
 clean_location_2009 <- master_location_2009_raw %>%
@@ -208,7 +208,7 @@ clean_dive_details_2009 <- dive_details_2009_raw %>%
 #| message: false
 
 # Source cleaning function
-source(here::here("functions", "cleaning_and_processing.R"))
+source(here::here("functions", "cleaning.R"))
 
 # Explore cleaned 2009-2016 data
 explore_data_structure(clean_fish_2009, "CLEANED FISH ABUNDANCE 2009-2016")

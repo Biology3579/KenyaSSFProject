@@ -1,13 +1,13 @@
 ## ---------------------------
 ##
-## Script name: exploring_cleaning_processing.r
+## Script name: extracting.r
 ##
 ## Purpose of script: 
-##      # A file of functions for cleaning the Palmer Penguins dataset
+##       A file of functions to extract additional data
 ##
 ## Author: Candela Ferrer Diez
 ##
-## Date Created: 2025-10-26
+## Date Created: 2025-11-15
 ##
 ##
 ## ---------------------------
@@ -61,12 +61,12 @@ drop_columns <- function(data, drop_cols) {
 
 # A function to standardize text ----
 standardize_text <- function(data, text_cols) {
-    data %>%
-      mutate(across(all_of(text_cols), str_trim)) %>%
-      mutate(across(all_of(text_cols), str_squish)) %>%
-      mutate(across(all_of(text_cols), str_to_lower)) %>%
-      mutate(across(all_of(text_cols), ~str_replace_all(., " ", "_")))
-  }
+  data %>%
+    mutate(across(all_of(text_cols), str_trim)) %>%
+    mutate(across(all_of(text_cols), str_squish)) %>%
+    mutate(across(all_of(text_cols), str_to_lower)) %>%
+    mutate(across(all_of(text_cols), ~str_replace_all(., " ", "_")))
+}
 
 # A function to convert column types ----
 convert_column_types <- function(data, 

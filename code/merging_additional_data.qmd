@@ -23,7 +23,6 @@ Load the necessary packages (these can be found in ...)
 
 Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
 
-
 ```{r}
 #| label: r set-up
 #| echo: false
@@ -46,9 +45,11 @@ renv::restore()
 # Adding Human Gravity
 
 ## Location data
+
 We will be adding the merged data to the master lcoation - as this contians..
 
 ### Load cleaned data
+
 ...
 
 ```{r}
@@ -64,6 +65,7 @@ clean_location_2018 <- read.csv(here::here("processed_data","clean_location_2018
 ### Convert to Spatial Format
 
 Transform the location data into a spatial object (simple features) to enable spatial operations and joins with the gravity data.
+
 ```{r}
 #| label: convert-to-spatial
 #| echo: false
@@ -82,8 +84,7 @@ sites_sf <- st_as_sf(clean_location_2018,
 
 ### Load Gravity Data
 
-Load the human gravity shapefile which contains modeled human pressure on coral reefs based on population density and accessibility within a 500 km radius.
-... (more about this)
+Load the human gravity shapefile which contains modeled human pressure on coral reefs based on population density and accessibility within a 500 km radius. ... (more about this)
 
 ```{r}
 #| label: load-gravity-data
@@ -99,7 +100,9 @@ glimpse(gravity_data)
 ```
 
 ### Clean Gravity Data
+
 Standardise column names to match the celaned data
+
 ```{r}
 #| label: clean-gravity-data
 #| echo: false
@@ -112,8 +115,7 @@ clean_gravity_data <- clean_column_names(gravity_data)
 
 ### Extract Gravity Values
 
-Match each survey site to the nearest gravity grid cell and extract the human pressure values.
-I will be doing this through a spatial join by finding the nearest gravity grid cell for each cell - For each site in sites_sf, find the nearest polygon in gravity_data and copy all its attributes (reef_id, grav_tot) to that site's row
+Match each survey site to the nearest gravity grid cell and extract the human pressure values. I will be doing this through a spatial join by finding the nearest gravity grid cell for each cell - For each site in sites_sf, find the nearest polygon in gravity_data and copy all its attributes (reef_id, grav_tot) to that site's row
 
 ```{r}
 #| label: extract-gravity
@@ -157,6 +159,7 @@ results <- sites_with_gravity %>%
 ### Checking results
 
 Convert the spatial object back to a regular dataframe and organize columns for easier interpretation.
+
 ```{r}
 #| label: check-results
 
@@ -174,14 +177,9 @@ if(nrow(missing_gravity) > 0) {
 
 # Adding Management Data
 
+# Save data
 
-
-
-
-
-
-# Save data  
-... 
+...
 
 ```{r}
 

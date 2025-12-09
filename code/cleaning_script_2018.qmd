@@ -15,28 +15,6 @@ Load the necessary packages (these can be found in ...)
 Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
 
 ```{r}
-#| label: r set-up
-#| echo: false
-#| include: false
-
-# Install Packages -> BAD CODE (delete once renv snapshot)
-install.packages("lubridate")
-install.packages("dplyr") 
-install.packages("here") 
-install.packages("tidyverse")
-install.packages("janitor")
-install.packages("ggplot2")
-
-#Load packages -> BAD CODE (delete once renv snapshot)
-library(tidyverse)  # Data manipulation (dplyr, ggplot2), pipes (%>%), string functions (str_trim, str_to_title)
-library(here)       # Reproducible file paths that work across different computers
-library(janitor)    # Clean column names to lowercase snake_case
-library(lubridate)  # Parse and manipulate dates easily
-library(dplyr)      # ...
-
-```
-
-```{r}
 #| label: renv-restore
 renv::restore()
 ```

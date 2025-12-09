@@ -1,0 +1,283 @@
+---
+title: "adding_chlorophyll_a"
+author: "Candela Ferrer Diez"
+date: 2025-12-01
+format: 
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+    theme: cosmo
+    embed-resources: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+## Overview
+
+This document processes NASA Ocean Color Level-3 binned (L3b) chlorophyll-a data for the Western Indian Ocean (WIO) region. The script:
+
+-   Reads HDF5/NetCDF files containing binned satellite ocean color data
+-   Converts NASA bin numbers to geographic coordinates (lat/lon)
+-   Filters data to the WIO Area of Interest (37°E - 47°E, 15°S - 1°N)
+-   Exports combined data to CSV and Parquet formats
+
+## R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README to ensure proper setup and usage.*
+
+### Load Required Packages
+
+```{r}
+#| label: load-packages
+#| echo: false
+#| include: false
+
+#Delete for the final version of the code
+library(here)
+library(hdf5r)
+library(data.table)
+library(arrow)
+library(sf)
+library(data.table)
+```
+
+### Restore Package Environment
+
+```{r}
+#| label: renv-restore
+#| eval: false
+
+renv::restore()
+```
+
+## Configuration
+
+```{r}
+#| label: config
+
+# Western Indian Ocean Area of Interest (Kenya, Tanzania, Comoros)
+coords_list <- list(
+  W = 37.0,   # West longitude
+  E = 47.0,   # East longitude
+  S = -15.0,  # South latitude
+  N = 1.0     # North latitude
+)
+```
+
+### Source Functions
+
+Functions for data processing are sourced from a separate script to keep this document clean and focused on the analysis workflow.
+```{r}
+#| label: source-functions
+source(here::here("functions", "extracting.R"))
+```
+
+
+## File Processing
+
+### Locate Input Files
+
+```{r}
+#| label: find-files
+
+# Define path to all the raw chlor a files 
+# - returns a vector of the full paths for each chlor a file
+filenames <- list.files(
+  here::here("raw_data", "chlor_a_raw"),
+  full.names = TRUE)
+
+```
+
+```{r}
+### Single File Processing Function
+#| label: process-file-function
+
+#libraries
+
+#functions 
+source(here::here("functions", "extracting.R"))
+
+#| label: process-data
+
+# 1. Apply processing function to all files
+# We use lapply to loop over the filenames vector
+data_list <- lapply(filenames, function(f) {
+  process_single_file(filepath = f, coords_list)
+})
+
+# 2. Combine into a single data table
+all_data <- data.table::rbindlist(data_list, use.names = TRUE, fill = TRUE)
+
+message(sprintf("Processing complete. Total rows extracted: %d", nrow(all_data)))
+```
+
+## Results and Export
+
+```{r}
+#| label: save-data
+
+
+#libraries
+library(data.table)
+
+#save csv
+fwrite(
+  all_data,
+  here::here("processed_data", "all_chlor_a_combined.csv")
+)
+
+
+```
+
+
+# Part 2: Merging with Location Data
+
+## Load Libraries
+
+```{r}
+
+# load location data
+
+location_data <- read.csv(here("processed_data", "clean_location_2018.csv"))
+
+```
+
+#Merge Nearest-bin, same month -\> assigns each station the single closest satellite bin from the same year-month.
+
+```{r}
+# 1) convert to sf (lon/lat are numeric columns in your clean file)
+sat_sf <- st_as_sf(all_data, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+sta_sf <- st_as_sf(clean_location_2018, coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+
+# 2) add year-month for temporal matching
+sat_sf$ym <- format(as.Date(sat_sf$date), "%Y-%m")
+sta_sf$ym <- format(as.Date(sta_sf$date), "%Y-%m")
+
+# 3) find nearest *within same month*, falling back to global nearest if none
+nearest_matches <- integer(nrow(sta_sf))
+for (i in seq_len(nrow(sta_sf))) {
+  ym_i <- sta_sf$ym[i]
+  candidates <- which(sat_sf$ym == ym_i)
+  if (length(candidates) == 0) {
+    nearest_matches[i] <- st_nearest_feature(sta_sf[i, ], sat_sf)
+  } else {
+    idx_local <- st_nearest_feature(sta_sf[i, ], sat_sf[candidates, ])
+    nearest_matches[i] <- if (!is.na(idx_local)) candidates[idx_local] else st_nearest_feature(sta_sf[i, ], sat_sf)
+  }
+}
+
+# 4) build merged table
+merged_nearest <- cbind(
+  as.data.table(clean_location_2018),
+  as.data.table(sat_sf)[nearest_matches, .(sat_date = date, sat_chlor_a = chlor_a, sat_nobs = nobs, sat_lon = lon, sat_lat = lat)]
+)
+
+# 5) inspect
+head(merged_nearest)
+
+```
+
+## Visualization
+
+### Chlorophyll-a Distribution
+
+```{r}
+#| label: plot-chlor-distribution
+#| fig-width: 10
+#| fig-height: 6
+
+ggplot(merged_nearest %>% filter(!is.na(sat_chlor_a)), 
+       aes(x = sat_chlor_a)) +
+  geom_histogram(bins = 50, fill = "steelblue", alpha = 0.7) +
+  scale_x_log10() +
+  labs(
+    title = "Distribution of Chlorophyll-a at Survey Locations",
+    subtitle = "Monthly averages matched by location and month",
+    x = "Chlorophyll-a (mg/m³, log scale)",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+### Spatial Distribution
+
+```{r}
+#| label: plot-spatial
+#| fig-width: 10
+#| fig-height: 8
+
+ggplot(merged_nearest %>% filter(!is.na(sat_chlor_a)), 
+       aes(x = longitude, y = latitude, color = sat_chlor_a)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_color_viridis_c(trans = "log10", option = "viridis") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "Spatial Distribution of Chlorophyll-a Values",
+    subtitle = "Survey locations with matched monthly chlorophyll-a data",
+    x = "Longitude",
+    y = "Latitude",
+    color = "Chlorophyll-a\n(mg/m³)"
+  ) +
+  theme_minimal()
+```
+
+### Match Quality
+
+```{r}
+#| label: plot-match-quality
+#| fig-width: 10
+#| fig-height: 6
+
+location_with_chlor %>%
+  filter(!is.na(chlor_a_distance_km)) %>%
+  ggplot(aes(x = chlor_a_distance_km)) +
+  geom_histogram(bins = 30, fill = "coral", alpha = 0.7) +
+  labs(
+    title = "Distribution of Spatial Match Distances",
+    subtitle = "Distance between survey location and nearest chlorophyll-a grid cell",
+    x = "Distance (km)",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+## Final Summary
+
+```{r}
+#| label: final-summary
+
+cat("\n=== FINAL SUMMARY ===\n\n")
+
+cat("Chlorophyll-a Processing:\n")
+cat(sprintf("  Files processed: %d\n", length(unique(chlor_df$source_file))))
+cat(sprintf("  Total chlorophyll observations: %s\n", 
+            format(nrow(chlor_df), big.mark = ",")))
+cat(sprintf("  Months covered: %d\n", n_distinct(chlor_df$year_month)))
+
+cat("\nSpatial Matching (by month):\n")
+cat(sprintf("  Survey locations: %s\n", 
+            format(nrow(location_with_chlor), big.mark = ",")))
+cat(sprintf("  Successful matches: %s (%.1f%%)\n",
+            format(sum(!is.na(location_with_chlor$chlor_a)), big.mark = ","),
+            100 * mean(!is.na(location_with_chlor$chlor_a))))
+
+if (sum(!is.na(location_with_chlor$chlor_a)) > 0) {
+  cat("\nChlorophyll-a Statistics (matched points):\n")
+  cat(sprintf("  Mean: %.4f mg/m³\n", 
+              mean(location_with_chlor$chlor_a, na.rm = TRUE)))
+  cat(sprintf("  Median: %.4f mg/m³\n", 
+              median(location_with_chlor$chlor_a, na.rm = TRUE)))
+  cat(sprintf("  Range: %.4f - %.4f mg/m³\n",
+              min(location_with_chlor$chlor_a, na.rm = TRUE),
+              max(location_with_chlor$chlor_a, na.rm = TRUE)))
+  
+  cat("\nMatch Quality:\n")
+  cat(sprintf("  Mean spatial distance: %.2f km\n",
+              mean(location_with_chlor$chlor_a_distance_km, na.rm = TRUE)))
+  cat(sprintf("  Median spatial distance: %.2f km\n",
+              median(location_with_chlor$chlor_a_distance_km, na.rm = TRUE)))
+}
+```

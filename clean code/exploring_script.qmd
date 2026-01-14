@@ -1,0 +1,476 @@
+---
+title: "exploring_script"
+author: "Candela Ferrer Diez"
+date: 2025-11-06
+format: 
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+    theme: cosmo
+    embed-resources: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+## Overview
+
+This document explores ecological fish survey data from Kenya across two time periods: 2009-2016 and 2018-2023.
+
+## R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+Load the necessary packages (these can be found in ...)
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load packages -> BAD CODE (delete once renv snapshot)
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+```
+
+```{r}
+#| label: renv-restore
+renv::restore()
+```
+
+## 2009-2016 data
+
+### Load data
+
+```{r}
+#| label: load cleaned data 2009
+#| echo: false
+#| warning: false
+#| message: false
+
+# Load 2009-2016 datasets
+clean_fish_2009 <- read.csv(here("processed_data","clean_fish_2009.csv"))
+clean_location_2009 <- read.csv(here("processed_data","clean_location_2009.csv"))
+clean_dive_details_2009 <- read.csv(here("processed_data","clean_dive_details_2009.csv"))
+
+```
+
+### Site Observations Map
+
+...
+
+```{r}
+#| label: map 2009 site observations
+#| echo: false
+#| warning: false
+#| message: false
+
+# Filter for Kenya only and count observations per station
+site_counts_2009 <- clean_fish_2009 %>%
+  filter(country == "kenya") %>%
+  group_by(site) %>%
+  summarise(n_observations = n()) %>%
+  ungroup()
+
+# Join with location data (Kenya only)
+site_map_data_2009 <- clean_location_2009 %>%
+  filter(country == "kenya") %>%
+  left_join(site_counts_2009, by = "site") %>%
+  filter(!is.na(latitude) & !is.na(longitude))
+
+# Get map data for Kenya and surrounding region
+world <- ne_countries(scale = "medium", returnclass = "sf")
+kenya_region <- world %>%
+  filter(admin %in% c("Kenya", "Tanzania", "Somalia", "Uganda"))
+
+# Create the map with a tighter zoom
+map_plot_2009 <- ggplot() +
+  
+  # Plot all countries in Africa as the base layer
+  geom_sf(data = world[world$continent == "Africa",], 
+          fill = "gray95", color = "gray50", size = 0.3) + 
+  
+  geom_sf(data = kenya_region, fill = "lightblue", color = "gray30", size = 0.3) +
+  
+  geom_point(data = site_map_data_2009, 
+             aes(x = longitude, y = latitude, size = n_observations),
+             alpha = 0.6, color = "#440154") +
+  
+  scale_size_continuous(name = "Number of\nObservations", 
+                        range = c(0.5, 5),
+                        breaks = c(10, 25, 50, 75, 100, 150, 200)) +
+  
+  # Specify region of focus - Kenya in frame
+  coord_sf(xlim = c(38.9, 41.8), ylim = c(-5, -1.5)) + 
+  
+  labs(title = "Marine Survey Sites in Kenya",
+       subtitle = "Point size represents number of fish observations per site",
+       x = "Longitude", y = "Latitude") +
+  
+  theme_minimal() +
+  theme(panel.grid.major = element_line(color = "gray90", size = 0.2),
+        panel.background = element_rect(fill = "aliceblue"),
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "right")
+
+print(map_plot_2009)
+
+```
+
+### Species observations per site in 2009
+
+```{r}
+#| label: species observations per site 2009
+#| echo: false
+#| warning: false
+#| message: false
+
+
+# Calculate species richness and total observations per site (Kenya only)
+species_per_site_2009 <- clean_fish_2009 %>%
+  filter(country == "kenya") %>%
+  group_by(site) %>%
+  summarise(
+    n_species = n_distinct(species_new),
+    n_observations = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_species))
+
+# Create bar plot of species richness
+species_plot_2009 <- ggplot(species_per_site_2009, 
+                       aes(x = reorder(site, n_species), y = n_species)) +
+  geom_col(fill = "#440154") +
+  geom_text(aes(label = n_species), hjust = -0.2, size = 3) +
+  coord_flip() +
+  labs(title = "Species Richness by Survey Site (Kenya)",
+       subtitle = "Number of unique fish species observed at each site",
+       x = "Site", y = "Number of Species") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.text.y = element_text(size = 9),
+        legend.position = "bottom")
+
+print(species_plot_2009)
+
+```
+
+### Species observations vs sampling effort 2009
+
+```{r}
+#| label: species observations vs sampling effort 2009
+#| echo: false
+#| warning: false
+#| message: false
+
+# Create plot 
+sampling_effort_plot_2009 <- ggplot(species_per_site_2009, 
+                               aes(x = n_observations, y = n_species, size = n_observations)) +
+  geom_point(alpha = 0.7, color = "#440154") +
+  geom_text(aes(label = site), hjust = -0.1, vjust = 0.5, 
+            size = 2.5, check_overlap = TRUE) +
+  scale_size_continuous(guide = "none") +
+  labs(title = "Species Observations vs Sampling Effort (Kenya) 2009",
+       subtitle = "Relationship between number of observations and species observations",
+       x = "Number of Observations", y = "Number of Species") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+print(sampling_effort_plot_2009)
+
+```
+
+### Summary statistics 2009
+
+```{r}
+#| label: summary statistics 2009
+#| echo: false
+#| warning: false
+#| message: false
+
+cat("\n=== SUMMARY STATISTICS (KENYA ONLY) ===\n")
+cat("\nTotal sites:", n_distinct(species_per_site_2009$site))
+cat("\nTotal species:", n_distinct(clean_fish_2009 %>% filter(country == "kenya") %>% pull(species_new)))
+cat("\nTotal observations:", nrow(clean_fish_2009 %>% filter(country == "kenya")))
+cat("\n\nTop 5 sites by species richness:\n")
+print(head(species_per_site_2009))
+
+```
+
+## 2018-2023 data
+
+### Load data
+
+```{r}
+#| label: load cleaned data 2018
+#| echo: false
+#| warning: false
+#| message: false
+
+##Load 2018-2023 datasets
+clean_fish_2018 <- read.csv(here("processed_data","clean_fish_2018.csv"))
+clean_location_2018 <- read.csv(here("processed_data","clean_location_2018.csv"))
+clean_dive_details_2018 <- read.csv(here("processed_data","clean_dive_details_2018.csv"))
+
+```
+
+### Site Observations Map
+
+...
+
+```{r}
+#| label: map 2018 site observations
+#| echo: false
+#| warning: false
+#| message: false
+
+# Filter for Kenya only and count observations per station
+site_counts_2018 <- clean_fish_2018 %>%
+  filter(country == "kenya") %>%
+  group_by(site) %>%
+  summarise(n_observations = n()) %>%
+  ungroup()
+
+# Join with location data (Kenya only)
+site_map_data_2018 <- clean_location_2018 %>%
+  filter(country == "kenya") %>%
+  left_join(site_counts_2018, by = "site") %>%
+  filter(!is.na(latitude) & !is.na(longitude))
+
+# Get map data for Kenya and surrounding region
+world <- ne_countries(scale = "medium", returnclass = "sf")
+kenya_region <- world %>%
+  filter(admin %in% c("Kenya", "Tanzania", "Somalia", "Uganda"))
+
+# Create the map with a tighter zoom
+map_plot_2018 <- ggplot() +
+  
+  # Plot all countries in Africa as the base layer
+  geom_sf(data = world[world$continent == "Africa",], 
+          fill = "gray95", color = "gray50", size = 0.3) + 
+  
+  geom_sf(data = kenya_region, fill = "lightblue", color = "gray30", size = 0.3) +
+  
+  geom_point(data = site_map_data_2018, 
+             aes(x = longitude, y = latitude, size = n_observations),
+             alpha = 0.6, color = "#440154") +
+  
+  scale_size_continuous(name = "Number of\nObservations", 
+                        range = c(0.5, 5),
+                        breaks = c(10, 25, 50, 75, 100, 150, 200)) +
+  
+  # Specify region of focus - Kenya in frame
+  coord_sf(xlim = c(38.9, 41.8), ylim = c(-5, -1.5)) + 
+  
+  labs(title = "Marine Survey Sites in Kenya",
+       subtitle = "Point size represents number of fish observations per site",
+       x = "Longitude", y = "Latitude") +
+  
+  theme_minimal() +
+  theme(panel.grid.major = element_line(color = "gray90", size = 0.2),
+        panel.background = element_rect(fill = "aliceblue"),
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "right")
+
+print(map_plot_2018)
+
+```
+
+### Species observations per site in 2018
+
+```{r}
+#| label: species observations per site 2018
+#| echo: false
+#| warning: false
+#| message: false
+
+
+# Calculate species richness and total observations per site (Kenya only)
+species_per_site_2018 <- clean_fish_2018 %>%
+  filter(country == "kenya") %>%
+  group_by(site) %>%
+  summarise(
+    n_species = n_distinct(species),
+    n_observations = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_species))
+
+# Create bar plot of species richness
+species_plot_2018 <- ggplot(species_per_site_2018, 
+                       aes(x = reorder(site, n_species), y = n_species)) +
+  geom_col(fill = "#440154") +
+  geom_text(aes(label = n_species), hjust = -0.2, size = 3) +
+  coord_flip() +
+  labs(title = "Species Richness by Survey Site (Kenya)",
+       subtitle = "Number of unique fish species observed at each site",
+       x = "Site", y = "Number of Species") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        axis.text.y = element_text(size = 9),
+        legend.position = "bottom")
+
+print(species_plot_2018)
+
+```
+
+### Species observations vs sampling effort 2018
+
+```{r}
+#| label: species observations vs sampling effort 2018
+#| echo: false
+#| warning: false
+#| message: false
+
+# # Create plot 
+sampling_effort_plot_2018 <- ggplot(species_per_site_2018, 
+                               aes(x = n_observations, y = n_species, size = n_observations)) +
+  geom_point(alpha = 0.7, color = "#440154") +
+  geom_text(aes(label = site), hjust = -0.1, vjust = 0.5, 
+            size = 2.5, check_overlap = TRUE) +
+  scale_size_continuous(guide = "none") +
+  labs(title = "Species Observations vs Sampling Effort (Kenya) 2018",
+       subtitle = "Relationship between number of observations and species observations",
+       x = "Number of Observations", y = "Number of Species") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+print(sampling_effort_plot_2018)
+
+```
+
+### Summary statistics 2018
+
+```{r}
+#| label: summary statistics 2018
+#| echo: false
+#| warning: false
+#| message: false
+
+cat("\n=== SUMMARY STATISTICS (KENYA ONLY) ===\n")
+cat("\nTotal sites:", n_distinct(species_per_site_2018$site))
+cat("\nTotal species:", n_distinct(clean_fish_2018 %>% filter(country == "kenya") %>% pull(species)))
+cat("\nTotal observations:", nrow(clean_fish_2018 %>% filter(country == "kenya")))
+cat("\n\nTop 5 sites by species richness:\n")
+print(head(species_per_site_2018))
+
+```
+
+
+# Human Gravity Exploration
+
+
+## Summary Statistics
+
+Calculate summary statistics of human gravity values by country and location to understand pressure patterns across study regions.
+```{r}
+#| label: summary-statistics
+
+# Summary by country
+country_summary %
+  group_by(country) %>%
+  summarise(
+    n_stations = n(),
+    n_sites = n_distinct(site),
+    n_locations = n_distinct(location),
+    mean_gravity = mean(Grav_tot, na.rm = TRUE),
+    median_gravity = median(Grav_tot, na.rm = TRUE),
+    min_gravity = min(Grav_tot, na.rm = TRUE),
+    max_gravity = max(Grav_tot, na.rm = TRUE),
+    sd_gravity = sd(Grav_tot, na.rm = TRUE)
+  )
+
+print("Summary by Country:")
+print(country_summary)
+
+```
+
+
+# Identify highest pressure sites
+top_pressure %
+  dplyr::arrange(dplyr::desc(Grav_tot)) %>%
+  dplyr::select(station, site, location, country, Grav_tot, latitude, longitude) %>%
+  dplyr::slice_head(n = 10)
+
+print("\n10 Highest Pressure Sites:")
+print(top_pressure)
+```
+
+## Visualizations
+
+Create maps and plots to visualize the distribution of human pressure across survey sites.
+
+### Map of Sites by Human Gravity
+```{r}
+#| label: map-plot
+#| fig-width: 10
+#| fig-height: 8
+
+# Map of sites colored by gravity
+map_plot <- ggplot() +
+  geom_sf(data = sites_with_gravity, 
+          aes(color = Grav_tot), 
+          size = 3, alpha = 0.7) +
+  scale_color_viridis_c(name = "Human\nGravity", 
+                        option = "plasma") +
+  facet_wrap(~country) +
+  theme_minimal() +
+  labs(title = "Human Gravity at Study Sites",
+       subtitle = "Darker colors = higher human pressure")
+
+print(map_plot)
+```
+
+### Distribution by Location
+```{r}
+#| label: boxplot
+#| fig-width: 10
+#| fig-height: 6
+
+# Boxplot of gravity distribution by location
+boxplot <- ggplot(results, aes(x = reorder(location, Grav_tot, median), 
+                               y = Grav_tot, 
+                               fill = country)) +
+  geom_boxplot() +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Human Gravity Distribution by Location",
+       x = "Location", 
+       y = "Total Gravity (500 km radius)",
+       fill = "Country")
+
+print(boxplot)
+```
+
+### Distance to Nearest Grid Cell
+```{r}
+#| label: distance-check
+#| fig-width: 8
+#| fig-height: 5
+
+# Check distance to nearest grid cell
+distance_check <- ggplot(results, aes(x = distance_to_grid_km)) +
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = 5, linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Distance from Sites to Nearest Gravity Grid Cell",
+       subtitle = "Red line = 5 km (half the grid size)",
+       x = "Distance (km)",
+       y = "Number of sites")
+
+print(distance_check)
+```
+
+
+```

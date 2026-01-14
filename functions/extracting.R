@@ -16,7 +16,7 @@
 #
 # ---------------------------
 
-# Extracting chl_a data ----
+# Extracting chl_a and SST data ----
 
 ## Libraries ----
 library(tidyverse)   # 
@@ -25,16 +25,18 @@ library(hdf5r)       # read HDF5-style files (NASA L3b)
 library(arrow)       # write_parquet
 library(sf)          # spatial matching utilities (st_nearest_feature)
 library(dplyr)       # light data manipulation helpers (used in a few helpers)
+library(units)
 
-## Processing raw data ----
+## Processing extarcted data files ----
 
 ### A function to parse the date from filename ----
-# Extracts first 8-digit sequence (YYYYMMDD) from the HDF5-NetCDF file and returns Date or NA
+# Extracts first 8-digit sequence (YYYYMMDD) from the HDF5-NetCDF file and returns it as a date
 parse_date <- function(filename) {
-  date_str <- stringr::str_extract(filename, "\\d{8}") #  searches the filename and pulls out the date
-  if (is.na(date_str)) return(NA) # returns NA if it cannot find the date
-  as.Date(date_str, format = "%Y%m%d") #reads the 8 digits as a date
+  date_str <- stringr::str_extract(filename, "\\d{8}")
+  if (is.na(date_str)) return(NA)
+  as.Date(date_str, format = "%Y%m%d")
 }
+
 
 ### A function to NASA bin numbers to lat/lon (vectorized) ----
 # Every MODIS L3b bin has a fixed location on the globe, 
@@ -42,11 +44,9 @@ parse_date <- function(filename) {
 # tells you which bin the chlorophyll data refers to. 
 # To be able to join this data to my sites, I need to extract the coordinates. 
 # This uses the bin numbers - stored in bin_num  integer or numeric vector (0-based); numrows default set to 8640
-nasa_bin_to_latlon <- function(bin_nums, 
-                               numrows = 8640) { # 8640 rows corresponds to resolution used by MODIS L3b global bins
- 
-  bin_nums <- as.numeric(bin_nums) # Convert vectors to numeric to avoid maths errors (in further equations)
-  is_invalid <- is.na(bin_nums) | bin_nums < 0 #deals with potential processing errors
+nasa_bin_to_latlon <- function(bin_nums, numrows = 8640) { 
+  bin_nums <- as.numeric(bin_nums)
+  is_invalid <- is.na(bin_nums) | bin_nums < 0
   
 # Calculate latitude
   #  First, compute the "row number" for each bin.
@@ -84,26 +84,17 @@ nasa_bin_to_latlon <- function(bin_nums,
   # Then, convert column position → longitude
   # - Multiply by 360 → degrees in [0, 360)
   # - Center of the bin horizontally
-  # - Divide by total bins → fraction of full 360° circle                              numrows = 8640) {                                numrows = 8640) {                                numrows = 8640) { 
+  # - Divide by total bins → fraction of full 360° circle
+                               
   longitude <- 360.0 * (column_in_row + 0.5) / bins_in_this_row  - 180.0  
-
-  # Set invalid bins to NA
   latitude[is_invalid] <- NA_real_
   longitude[is_invalid] <- NA_real_
-  
   list(lat = latitude, lon = longitude) #returns coordinates
 }
 
+## A function to read NASA L3b files and extract chlor_a_means----
 
-## A function to read and process NASA L3b files ----
-# Reads each NASA L3b bin files (HDF5/NetCDF style HDF5 layout).
-# and extracts relevant values to compute chlor_mean, 
-# convert bin numbers to lat/lon, 
-# and returns combined data.table. 
-
-### Process single file 
-process_single_file <- function(filepath, AOI = NULL) {
- 
+extract_raw_data <- function(filepath, AOI) {
   # open file
     h5file <- hdf5r::H5File$new(filepath, mode = "r")
     
@@ -119,27 +110,27 @@ process_single_file <- function(filepath, AOI = NULL) {
     
   # calculate chlor_a mean
   # - this will be chlor_a sum / nobs 
-  
-    # 1. Extract the values as numbers (for ease of use in the equation)
+
+    # Extract the values as numbers (for ease of use in the equation)
     chlor_sum <- as.numeric(chlor_df[["sum"]])
     nobs <- as.numeric(binlist_df[["nobs"]])
     
-    # 2. Compute the mean
+    # Compute the mean
     chlor_a_mean <- rep(NA_real_, length(nobs))
-    valid <- which(!is.na(nobs) & nobs > 0 & !is.na(chlor_sum))
+    valid <- which(!is.na(nobs) & nobs > 0 & !is.na(chlor_sum)) # checking that the lists are not empty and that nobs > 0
     if (length(valid)) chlor_a_mean[valid] <- chlor_sum[valid] / nobs[valid]
 
     
-  # convert NASA bins to lat/lon
-    # 1. extract the bin numbers
+  # Convert NASA bins to lat/lon
     bin_nums <- as.numeric(binlist_df[["bin_num"]])
-    # 2. convert numbers to coordinates
     coords <- nasa_bin_to_latlon(bin_nums)
- 
-  # build data.table with relevant variables   
+    
+  # Build data.table with relevant variables   
     dt <- data.table::data.table(
       # add extracted variables
       chlor_a_mean = chlor_a_mean,
+      nobs = nobs,
+      bin_num = bin_nums,
       lat = coords$lat,
       lon = coords$lon
     )[
@@ -154,6 +145,95 @@ process_single_file <- function(filepath, AOI = NULL) {
       )
     ]
 }
+
+## Assigns to each station, the nearest satellite cell (store bin_num and distance to cell)
+
+assign_nearest_cell <- function(raw_sat_data, clean_locations){
+  
+  unique_cells <- raw_sat_data %>% distinct(bin_num, lat, lon)
+  
+  # convert to sf (assumes columns as specified)
+  stations_as_sf  <- st_as_sf(clean_locations, coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+  unique_cells_as_sf  <- st_as_sf(unique_cells, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+  
+  # find index of nearest feature in first_sf for each point in clean_sf
+  nearest_indices <- st_nearest_feature(stations_as_sf, unique_cells_as_sf)
+  # nearest_idx[i] is the row index in first_sf closest to clean_sf[i,]
+  
+  # extract corresponding bin id
+  stations_as_sf$closest_cell <- unique_cells$bin_num[nearest_indices]
+  
+  # compute accurate geodetic distances (in meters) for those pairs
+  # st_distance on geographic coordinates uses s2/geodetic when available; specify by_element=TRUE
+  dists <- st_distance(stations_as_sf, unique_cells_as_sf[nearest_indices,], by_element = TRUE)
+  
+  # convert to numeric (in meters)
+  stations_as_sf$cell_distance_m <- as.numeric(set_units(dists, "m"))
+  
+  # put back into the original dataframe if needed
+  clean_locations$closest_cell   <- stations_as_sf$closest_cell
+  clean_locations$cell_distance_m  <- stations_as_sf$cell_distance_m
+  
+  clean_locations
+  
+}
+
+
+extract_latlon_ocnet <- function(filepath, AOI = NULL,
+                                 lon_name = "longitude",
+                                 lat_name = "latitude") {
+  nc <- nc_open(filepath)
+  on.exit(nc_close(nc))
+  
+  lon <- ncvar_get(nc, lon_name)
+  lat <- ncvar_get(nc, lat_name)
+  
+  if (!is.null(AOI)) {
+    lon <- lon[lon >= AOI$W & lon <= AOI$E]
+    lat <- lat[lat >= AOI$S & lat <= AOI$N]
+  }
+  
+  data.table(lon = lon, lat = lat)
+}
+
+
+
+
+# A
+
+compute_annual_mean <- function(clean_locations, raw_sat_data, metric_name, metric_annual_mean){
+  for (i in 1:length(clean_locations$station)){
+    #get month and year and id
+    date <- clean_locations$date[i]
+    closest_cell = clean_locations$closest_cell[i]
+    
+    # start = first day of the month 11 months before the reference month
+    start_month <- floor_date(date, "month") %m-% months(11)
+    
+    # end = last day of the reference month
+    end_month <- ceiling_date(date, "month") - days(1)
+    
+    relevant_cells <- raw_sat_data %>%
+      filter(
+        bin_num == closest_cell,
+        date >= start_month,
+        date <= end_month
+      ) 
+    
+    #find their chlorophyll average
+    weighted_mean <- sum(relevant_cells[[metric_name]] * relevant_cells$nobs, na.rm = TRUE) /
+      sum(relevant_cells$nobs, na.rm = TRUE)
+    
+    
+    #add it to the table
+    clean_locations[[metric_annual_mean]][i] = weighted_mean
+  }
+  
+  clean_locations
+}
+
+
+
 
 ## Combine with master location
 

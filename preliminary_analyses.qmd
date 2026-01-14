@@ -1,0 +1,209 @@
+---
+title: "perliminary_analyses"
+format: html
+editor: visual
+---
+
+# Overview
+
+This document explores the 2018 dataset. This data ...
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+Load the necessary packages (these can be found in ...)
+
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load packages -> BAD CODE (delete once renv snapshot)
+library(tidyverse)
+library(here)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(ggfortify) # extends ggplot2 for some more ease with stats
+library(MASS) # fits regression models etc.
+
+```
+
+```{r}
+#| label: renv-restore
+renv::restore()
+```
+
+# Y variables
+
+## Load data
+
+Using 2018 dataset
+
+```{r}
+#| label: load data
+#| echo: false
+#| warning: false
+#| message: false
+
+fish_data_2018 <- readr::read_rds(here::here("processed_data", "clean_fish_2018.rds"))
+location_2018 <- readr::read_rds(here::here("processed_data", "clean_location_2018.rds"))
+
+
+```
+
+## Exploring the data
+
+```{r}
+
+#| label: explore data
+#| echo: false
+#| warning: false
+#| message: false
+# Overview of the data
+head(fish_data_2018) # see first three rows
+str(fish_data_2018) #structure of data
+summary(fish_data_2018) #summary of data
+
+
+```
+
+## Biomass
+
+This is ...
+
+## Mean Biomass per site
+
+This is the average of the weight of all individuals per unit area
+
+To do this we must find the mean of across the station transects
+
+```{r}
+#libraries
+library(dplyr)
+
+# find the mean per station first
+station_mean <- fish_data_2018 %>%
+  group_by(station) %>%
+  summarise(
+    station_mean = mean(total_wt_g, na.rm = TRUE),
+    site = first(site),
+    country = first(country),
+    .groups = "drop"
+  ) %>% 
+  left_join(
+    location_2018 %>%
+      dplyr::select(station, latitude, longitude),
+    by = "station"
+  )
+
+#then find the site mean
+site_mean <- station_mean %>%
+  group_by(site) %>%
+  summarise(
+    site_mean = mean(station_mean, na.rm = TRUE),
+    latitude = mean(latitude, na.rm = TRUE),
+    longitude = mean(longitude, na.rm = TRUE),
+    country = first(country),
+    .groups = "drop"
+  )
+
+```
+
+## Plot Mean Site Biomass
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# 3. Build a named color vector (guaranteed to match the data)
+country_levels <- sort(unique(site_mean$country))
+# provide preferred base colours for known countries, fallback to palette if more levels appear
+base_colours <- c("#1b9e77", "#d95f02", "#7570b3")
+if (length(country_levels) <= length(base_colours)) {
+  fill_vals <- setNames(base_colours[seq_along(country_levels)], country_levels)
+} else {
+  fill_vals <- setNames(
+    grDevices::colorRampPalette(base_colours)(length(country_levels)),
+    country_levels
+  )
+}
+
+# map data (assume world/region already created)
+world <- ne_countries(scale = "medium", returnclass = "sf")
+region <- world %>% filter(admin %in% c("Kenya", "Tanzania", "Comoros"))
+
+
+# 4. Plot with halo (larger black points underneath + colored points on top)
+map_plot_2009 <- ggplot() +
+  geom_sf(
+    data = world[world$continent == "Africa", ],
+    fill = "grey95", colour = "grey70", linewidth = 0.25
+  ) +
+  geom_sf(data = region, fill = "grey88", colour = "grey40", linewidth = 0.35) +
+
+  # halo layer: slightly larger than colored points
+  geom_point(
+    data = site_mean,
+    aes(x = longitude, y = latitude, size = site_mean),
+    shape = 21, fill = "black", colour = NA, alpha = 0.9, show.legend = FALSE
+  ) +
+
+  # colored layer
+  geom_point(
+    data = site_mean,
+    aes(x = longitude, y = latitude, size = site_mean, fill = country),
+    shape = 21, colour = "black", stroke = 0.25, alpha = 0.95
+  ) +
+
+  scale_fill_manual(values = fill_vals, na.value = "grey50", name = "Country") +
+  scale_size_area(name = "Mean site biomass (g)", max_size = 5) +
+
+  coord_sf(xlim = c(37.0, 47.8), ylim = c(-15.5, 1.5)) +
+  labs(title = "Mean Fish Biomass per Survey Site",
+       subtitle = "Point area = mean biomass; fill = country",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal(base_size = 1) +
+  theme(panel.background = element_rect(fill = "aliceblue", colour = NA),
+        panel.grid.major = element_line(colour = "grey90", linewidth = 0.2),
+        legend.position = "right")
+
+# draw
+map_plot_2009
+
+```
+
+## Mean Biomass per country
+
+```{r}
+
+#then find the country mean
+country_mean <- site_mean %>%
+  group_by(country) %>%
+  summarise(
+    country_mean = mean(site_mean, na.rm = TRUE),
+    latitude = mean(latitude, na.rm = TRUE),
+    longitude = mean(longitude, na.rm = TRUE),
+    .groups = "drop"
+    )
+
+```
+
+###  Plot Mean Country Biomass
+
+...
+
+## Total Biomass per country
+
+```{r}
+#then find the country mean
+country_totals <- site_mean %>%
+  group_by(country) %>%
+  summarise(country_mean = sum(site_mean, na.rm = TRUE))
+```

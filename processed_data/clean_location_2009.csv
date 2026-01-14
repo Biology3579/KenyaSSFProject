@@ -1,181 +1,181 @@
-date,station,site,location,country,latitude,longitude,exposure,orientation,geology,reef_geomorphology,reef_type
-2009-10-16,chuma1,chumb,zanzibar,tanzania,-6.279933333,39.17395,2,north,continental_island,inner-seas_exposed_fringing_reef,forereef
-2009-10-16,chuma2,chumb,zanzibar,tanzania,-6.279266667,39.17416667,2,north,continental_island,inner-seas_exposed_fringing_reef,forereef
-2009-10-17,mnema1,mnemb,zanzibar,tanzania,-5.840966667,39.39646667,4,se,continental_island,ocean-exposed_fringing_reef,forereef
-2009-10-17,mnema2,mnemb,zanzibar,tanzania,-5.83975,39.39418333,4,se,continental_island,ocean-exposed_fringing_reef,forereef
-2009-10-25,mnaza1,mnazia,mnazi_outers,tanzania,-10.29486667,40.41475,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2009-10-25,mnaza2,mnazia,mnazi_outers,tanzania,-10.28918333,40.41085,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2009-10-26,mnazb1,mnazib,mnaziouterm,tanzania,-10.26611667,40.38583333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2009-10-26,mnazb2,mnazib,mnaziouterm,tanzania,-10.25835,40.3739,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2009-10-27,mnazd1,mnazid,mnaziinner,tanzania,-10.33686667,40.35586667,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,shallow_terrace
-2009-10-27,mnazd2,mnazid,mnaziinner,tanzania,-10.33165,40.36435,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,shallow_terrace
-2009-10-27,mnaze1,mnazie,mnaziinner,tanzania,-10.3163,40.36858333,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,shallow_terrace
-2009-10-28,mnaze2,mnazie,mnaziinner,tanzania,-10.31646667,40.3705,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,shallow_terrace
-2009-10-28,mnazf1,mnazif,mnazioutern,tanzania,-10.2363,40.34351667,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2009-10-28,mnazf2,mnazif,mnazioutern,tanzania,-10.2419,40.35036667,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2010-03-14,itsan1,itsan,grand_comore,comoros,-11.66951667,43.26335,3,west,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-14,itsan2,itsan,grand_comore,comoros,-11.66561667,43.26351667,3,west,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-15,chin1,chin,grand_comore,comoros,-11.9356,43.48603333,5,south,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-15,chin2,chin,grand_comore,comoros,-11.93485,43.48138333,5,south,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-16,mitsam1,mitsam,grand_comore,comoros,-11.37338333,43.31568333,3,north,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-16,mitsam2,mitsam,grand_comore,comoros,-11.37903333,43.28818333,3,north,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-17,moindz1,moindz,grand_comore,comoros,-11.77658333,43.24103333,3,west,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-18,shom1,shom,grand_comore,comoros,-11.64466667,43.395,5,east,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-20,male2,male,grand_comore,comoros,-11.86995,43.49945,5,south,oceanic_island,ocean-exposed_fringing_reef,forereef
-2010-03-21,feren1,feren,moheli,comoros,-12.4063,43.69545,4,south,oceanic_island,inner-seas_exposed_fringing_reef,deep_terrace
-2010-03-23,mirer1,mirer,moheli,comoros,-12.34021667,43.64998333,3,west,oceanic_island,inner-seas_exposed_fringing_reef,forereef
-2010-03-28,ambo1,ambo_inner,ambodivahibe,madagascar,-12.37121667,49.44038333,1,se,continental_fringing_reef,ocean-exposed_fringing_reef,shallow_terrace
-2010-03-29,ambo2,ambo_s,ambodivahibe,madagascar,-12.35865,49.46141667,2,north,continental_fringing_reef,ocean-exposed_fringing_reef,shallow_terrace
-2010-03-29,ambo3,ambo_s,ambodivahibe,madagascar,-12.37233333,49.44946667,2,north,continental_fringing_reef,ocean-exposed_fringing_reef,shallow_terrace
-2010-03-30,ambo4,ambo_outer,ambodivahibe,madagascar,-12.3518,49.46475,3,north,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2010-03-30,ambo5,ambo_outer,ambodivahibe,madagascar,-12.33871667,49.43623333,3,east,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2010-03-31,loky6,loky_s,loky,madagascar,-12.73046667,49.69643333,2,nw,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2010-04-01,loky8,lokynw,loky,madagascar,-12.72423333,49.66738333,2,se,continental_outer_shelf_barrier,coastal_barrier_reef_complex,diffuse_fringing_reef
-2010-04-01,loky9,lokynw,loky,madagascar,-12.70198333,49.66535,2,se,continental_outer_shelf_barrier,coastal_barrier_reef_complex,diffuse_fringing_reef
-2010-04-04,vohe13,vohem,vohemar_n,madagascar,-13.32646667,50.01341667,5,ese,continental_outer_shelf_barrier,coastal_barrier_reef_complex,forereef
-2010-04-05,vohe15,vohem,vohemar_n,madagascar,-13.33491667,50.01501667,5,ese,continental_outer_shelf_barrier,coastal_barrier_reef_complex,forereef
-2010-04-07,andra17,andravina_s_pt,andravina_bay,madagascar,-12.94133333,49.86805,1,nw,continental_fringing_reef,ocean-exposed_fringing_reef,reef_flat
-2010-04-09,loky6b,loky_s,loky,madagascar,-12.73105,49.69546667,2,nw,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2010-04-11,anka20,ankao_nne,ankao,madagascar,-12.79138333,49.81213333,2,nw,bank,bank_lagoon,shallow_lagoonal_terrace
-2010-04-11,anka21,ankao_s,ankao,madagascar,-12.82741667,49.81188333,2,n,bank,bank_lagoon,shallow_lagoonal_terrace
-2010-04-12,anka22,ankao_ne,ankao,madagascar,-12.76676667,49.82216667,3,n,bank,bank_barrier,forereef
-2010-04-12,anka23,ankao_nne,ankao,madagascar,-12.78185,49.811,2,nw,bank,bank_lagoon,shallow_lagoonal_terrace
-2010-04-13,anka21b,ankao_s,ankao,madagascar,-12.82868333,49.81375,2,n,bank,bank_lagoon,shallow_lagoonal_terrace
-2010-06-21,metund1,metundflat,metundo,mozambique,-11.12465,40.67598333,2,nw,continental_island,coastal_barrier_reef_complex,reef_flat
-2010-06-21,metund2,metundflat,metundo,mozambique,-11.13166667,40.69601667,2,nw,continental_island,coastal_barrier_reef_complex,reef_flat
-2010-06-22,metund3,makungn,metundo,mozambique,-11.09873333,40.72708333,5,e,continental_island,coastal_barrier_reef_complex,deep_terrace
-2010-06-23,metund4,makungn,metundo,mozambique,-11.09865,40.72798333,5,e,continental_island,coastal_barrier_reef_complex,deep_terrace
-2010-06-23,metund5,baixo_pinguim_ne,metundo,mozambique,-11.1336,40.70335,3,ne,continental_island,coastal_barrier_reef_complex,deep_terrace
-2010-06-24,metund6,baixo_pinguim_ne,metundo,mozambique,-11.08083333,40.66075,4,se,continental_island,coastal_barrier_reef_complex,deep_terrace
-2011-03-22,kifin32,kifinge,mafia,tanzania,-7.84965,39.8632,5,ese,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-03-22,kifinn,kifinge,mafia,tanzania,-7.843783333,39.86655,5,ese,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-03-23,nyamn07,nyamalile,mafia,tanzania,-8.028266667,39.51086667,2,west,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2011-03-23,nyams34,nyamalile,mafia,tanzania,-8.060366667,39.52853333,2,south,continental_patch_complex,inner_seas_patch_reef_complex,subtidal_reef_flat
-2011-03-24,mange1,mange,mafia,tanzania,-8.056833333,39.60428333,2,east,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2011-03-24,mange2,mange,mafia,tanzania,-8.0787,39.59795,3,south,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2011-03-25,kitut1,kitutia,mafia,tanzania,-8.131683333,39.6456,3,south,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2011-03-25,kitut2,kitutia,mafia,tanzania,-8.118833333,39.65035,2,ne,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2011-03-26,dindi8,dindini,mafia,tanzania,-7.91805,39.82726667,5,ses,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-03-26,dindi9,dindini,mafia,tanzania,-7.921633333,39.82505,5,ses,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-03-27,utumb13,utumbi,mafia,tanzania,-7.949133333,39.78851667,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,shallow_lagoonal_terrace
-2011-03-27,utumb12,utumbi,mafia,tanzania,-7.947616667,39.78738333,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,shallow_lagoonal_terrace
-2011-03-28,yuyun10,yuyuni,mafia,tanzania,-7.98175,39.81338333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-03-28,yuyun11,yuyuni,mafia,tanzania,-7.984416667,39.81223333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-09-27,fernvlos1,fernauvloso,nacala,mozambique,-14.46953333,40.68065,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,diffuse_fringing_reef
-2011-09-27,fernvlos2,fernauvloso,nacala,mozambique,-14.47116667,40.68085,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,diffuse_fringing_reef
-2011-09-28,mutiv1,mutiva,nacala,mozambique,-14.42596667,40.72763333,2,north,continental_fringing_reef,inner-seas_exposed_fringing_reef,forereef
-2011-09-28,mutiv2,mutiva,nacala,mozambique,-14.43128333,40.71481667,2,north,continental_fringing_reef,inner-seas_exposed_fringing_reef,forereef
-2011-09-30,nangat1,nangata,nacala,mozambique,-14.1846,40.69366667,3,ne,continental_fringing_reef,ocean-exposed_fringing_reef,deep_terrace
-2011-09-30,nangat2,nangata,nacala,mozambique,-14.21448333,40.78396667,4,east,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2011-10-01,napala,napala,nacala,mozambique,-14.44946667,40.6774,2,north,continental_fringing_reef,inner-seas_exposed_fringing_reef,forereef
-2011-10-02,paradise,paradise,nacala,mozambique,-14.45835,40.66068333,2,east,continental_fringing_reef,inner-seas_exposed_fringing_reef,diffuse_fringing_reef
-2011-10-03,tunnel,tunnel,pemba,mozambique,-12.95805,40.55376667,2,east,continental_fringing_reef,ocean-exposed_fringing_reef,deep_terrace
-2011-10-03,punto_maunhane,tunnel,pemba,mozambique,-12.95965,40.55975,2,east,continental_fringing_reef,ocean-exposed_fringing_reef,pinnacle
-2011-10-04,pemba3,tunnel,pemba,mozambique,-12.96096667,40.55853333,2,east,continental_fringing_reef,ocean-exposed_fringing_reef,diffuse_fringing_reef
-2011-10-05,imboout,imbobank,pemba,mozambique,-12.94608333,40.56653333,3,ne,continental_fringing_reef,ocean-exposed_fringing_reef,deep_terrace
-2011-10-05,imboin,imbobank,pemba,mozambique,-12.94866667,40.56408333,3,nw,continental_fringing_reef,ocean-exposed_fringing_reef,deep_terrace
-2011-10-06,pemba6,pemban,pemba,mozambique,-12.91353333,40.51966667,2,south,continental_fringing_reef,inner-seas_exposed_fringing_reef,forereef
-2011-10-06,pemba7,pemban,pemba,mozambique,-12.92488333,40.50005,1,sw,continental_fringing_reef,inner-seas_exposed_fringing_reef,diffuse_fringing_reef
-2011-10-09,va1,vamizinr,vamizi,mozambique,-10.99563333,40.68433333,3,north,continental_island,ocean-exposed_fringing_reef,deep_terrace
-2011-10-09,va2,vamizinu,vamizi,mozambique,-11.02225,40.64453333,2,north,continental_island,coastal_barrier_reef_complex,deep_terrace
-2011-10-10,va3,vamizinr,vamizi,mozambique,-10.98935,40.68725,3,north,continental_island,ocean-exposed_fringing_reef,deep_terrace
-2011-10-10,va4,vamizinu,vamizi,mozambique,-11.00726667,40.62273333,2,north,continental_island,coastal_barrier_reef_complex,deep_terrace
-2011-10-11,va5,vamizine,vamizi,mozambique,-10.99421667,40.71341667,4,ne,continental_island,ocean-exposed_fringing_reef,forereef
-2011-10-11,va6,vamizine,vamizi,mozambique,-10.99596667,40.72005,4,ne,continental_island,ocean-exposed_fringing_reef,forereef
-2011-10-12,va7,neptunes,vamizi,mozambique,-11.09933333,40.71855,5,360,continental_island,coastal_barrier_reef_complex,deep_terrace
-2011-10-12,va8,vamizine,vamizi,mozambique,-10.99668333,40.724850000000004,4,ne,continental_island,ocean-exposed_fringing_reef,forereef
-2014-02-28,kiwe1,kiwe,lalane,mozambique,-11.11665,40.62633333,2,e,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2014-02-28,kiwe2,kiwe,lalane,mozambique,-11.12533333,40.61171667,2,se,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2014-02-28,miwona,miwona,ns._ponta,mozambique,-11.20781667,40.5244,2,se,continental_patch_complex,inner_seas_patch_reef_complex,shallow_lagoonal_terrace
-2014-03-01,shauli1,metundonw,metundo,mozambique,-11.12168333,40.67656667,3,nw,continental_island,coastal_barrier_reef_complex,shallow_terrace
-2014-03-01,shauli2,metundonw,metundo,mozambique,-11.12011667,40.67365,3,nw,continental_island,coastal_barrier_reef_complex,shallow_terrace
-2014-03-02,metundone1,metundo_ne,metundo,mozambique,-11.13315,40.70245,5,ne,continental_island,ocean-exposed_fringing_reef,forereef
-2014-03-02,metundone2,metundo_ne,metundo,mozambique,-11.13545,40.70286667,5,nee,continental_island,ocean-exposed_fringing_reef,forereef
-2014-03-02,quifuki1,quifuki_s,quifuki,mozambique,-11.20548333,40.61575,5,s,continental_island,ocean-exposed_fringing_reef,forereef
-2014-03-27,isangsth,saisle_anglaise,salomon,chagos,-5.338383333,72.21386667,4,wnw,atoll,atoll_rim,forereef
-2014-03-27,jrknoll,salomon_lagoon,salomon,chagos,-5.342716667,72.22791667,2,various,atoll,atoll_patch,lagoon_pinnacle
-2014-03-28,saispass1-14,saisdela_passe,salomon,chagos,-5.298616667,72.25518333,5,n,atoll,atoll_rim,forereef
-2014-03-28,isangmid,saisle_anglaise,salomon,chagos,-5.331916667,72.21861667,4,wnw,atoll,atoll_rim,forereef
-2014-03-29,saispass2-14,saisdela_passe,salomon,chagos,-5.2986,72.2546,5,n,atoll,atoll_rim,forereef
-2014-03-29,ronanknoll,salomon_lagoon,salomon,chagos,-5.308833333,72.25236667,2,various,atoll,atoll_patch,lagoon_pinnacle
-2014-03-30,blenheim1-14,blenheim,blenheim_reef,chagos,-5.253983333,72.44605,5,sw,atoll,atoll_rim,forereef
-2014-03-30,blenheim2-14,blenheim,blenheim_reef,chagos,-5.242966667,72.48263333,5,se,atoll,atoll_rim,forereef
-2014-04-01,pbispass-06,pbisdela_passe,peros_banhos,chagos,-5.237333333,71.81498333,4,n,atoll,atoll_rim,forereef
-2014-04-01,pblag1,pbdiamantlagoon,peros_banhos,chagos,-5.256,71.77146667,2,ese,atoll,atoll_lagoon,inner_slope
-2014-04-02,moresby,pbisdela_passe,peros_banhos,chagos,-5.2374,71.83493333,4,ne,atoll,atoll_rim,forereef
-2014-04-02,pblag2,pbdiamantlagoon,peros_banhos,chagos,-5.2693,71.75493333,2,ese,atoll,atoll_lagoon,inner_slope
-2014-04-03,yeye,pbisdela_passe,peros_banhos,chagos,-5.25245,71.97558333,5,ene,atoll,atoll_rim,forereef
-2014-04-04,pbcoinlag1,pbcoinlagoon,peros_banhos,chagos,-5.4533,71.7767,2,n,atoll,atoll_lagoon,inner_slope
-2014-04-04,pbbernardsh,pblagknolls,peros_banhos,chagos,-5.414833333,71.77365,2,s,atoll,atoll_lagoon,lagoon_pinnacle
-2014-04-05,pbronankn,pblagknolls,peros_banhos,chagos,-5.4148,71.80071667,2,s,atoll,atoll_lagoon,lagoon_pinnacle
-2014-04-05,pbcoinlag2,pbcoinlagoon,peros_banhos,chagos,-5.449516667,71.7668,2,nne,atoll,atoll_lagoon,inner_slope
-2014-04-06,pbpetitcoquill,pbpetite_coquillage,peros_banhos,chagos,-5.342933333,71.9796,5,ene,atoll,atoll_rim,forereef
-2014-04-07,midbrowest,three_brothers,gt_chagos_bank,chagos,-6.157933333,71.5126,4,sw,atoll,atoll_rim,forereef
-2014-04-08,southbros,three_brothers,gt_chagos_bank,chagos,-6.1742,71.53916667,4,ne,atoll,atoll_rim,forereef
-2014-04-08,midbrolee,mid_brotherlag,gt_chagos_bank,chagos,-6.152066667,71.52718333,2,ne,atoll,atoll_lagoon,inner_slope
-2014-04-09,eagles,eagleout,gt_chagos_bank,chagos,-6.199583333,71.31528333,4,nw,atoll,atoll_rim,forereef
-2014-04-09,eaglen,eagleout,gt_chagos_bank,chagos,-6.173233333,71.33276667,4,n,atoll,atoll_rim,forereef
-2014-04-10,eaglelee,eagle_lee,gt_chagos_bank,chagos,-6.1846,71.3423,2,e,atoll,atoll_lagoon,inner_slope
-2014-04-11,egmonts,egmontin,gt_chagos_bank,chagos,-6.6805,71.39588333,5,e,atoll,atoll_rim,forereef
-2014-04-11,egmontn,egmontin,gt_chagos_bank,chagos,-6.6346,71.32638333,4,nw,atoll,atoll_rim,forereef
-2014-04-12,cannonpt,dgoutern,diego_garcia,chagos,-7.259416667,72.37263333,4,n,atoll,atoll_rim,forereef
-2014-04-12,courtsknoll,dglagoonn,diego_garcia,chagos,-7.26195,72.44333333,2,ne,atoll,atoll_patch,lagoon_pinnacle
-2014-04-13,middleisout,dgoutern,diego_garcia,chagos,-7.226233333,72.40843333,4,various,atoll,atoll_rim,forereef
-2014-04-13,melitasknoll,dglagoonn,diego_garcia,chagos,-7.25095,72.41985,2,various,atoll,atoll_patch,lagoon_pinnacle
-2015-10-03,ch_mvundeni,ch_mvundeni,kiunga,kenya,-1.934330016,41.3913,NA,east,,,
-2015-03-05,shauli1,metundo_nw,metundo,mozambique,-11.12168333,40.67656667,3,ne,continental_island,coastal_barrier_reef_complex,shallow_terrace
-2015-03-05,shauli2,metundo_nw,metundo,mozambique,-11.12011667,40.67365,3,ne,continental_island,coastal_barrier_reef_complex,shallow_terrace
-2015-03-06,kiwe1,kiwe,lalane,mozambique,-11.11665,40.62633333,2,east,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2015-03-06,kiwe2,kiwe,lalane,mozambique,-11.12533333,40.61171667,2,east,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2015-03-06,lalane1,lalane,lalane,mozambique,-11.14878333,40.53946667,2,east,continental_patch_complex,inner_seas_patch_reef_complex,shallow_lagoonal_terrace
-2015-03-07,vamizine-5,vamizine,vamizi,mozambique,-10.994217,40.71341702,4,north,continental_island,coastal_barrier_reef_complex,forereef
-2015-03-07,vamizinr-3,vamizinr,vamizi,mozambique,-10.99069501,40.68838497,3,ene,continental_island,ocean-exposed_fringing_reef,deep_terrace
-2015-03-10,metundoe,metundoe,metundo,mozambique,-11.15118097,40.70303704,4,east,continental_island,ocean-exposed_fringing_reef,forereef
-2015-03-10,metundone1,metundone,metundo,mozambique,-11.13315,40.70245,5,ne,continental_island,ocean-exposed_fringing_reef,forereef
-2015-03-11,malkiwe,malinde-kiwe,malinde,mozambique,-11.30974604,40.52603798,2,west,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2015-03-11,kisangamungo,malinde-kiwe,malinde,mozambique,-11.304951,40.50233304,2,west,continental_patch_complex,inner_seas_patch_reef_complex,shallow_terrace
-2015-03-12,rongwe,palma_islands,palma,mozambique,-10.82188399,40.65679098,2,west,continental_island,coastal_barrier_reef_complex,subtidal_reef_flat
-2015-03-12,tekamajis,palma_islands,palma,mozambique,-10.80747499,40.649174,2,west,continental_island,coastal_barrier_reef_complex,shallow_lagoonal_terrace
-2015-03-13,farol1,quiwia,palma,mozambique,-10.69706667,40.65378333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2015-03-13,quiwia,quiwia,palma,mozambique,-10.72325,40.63063333,2,south,continental_fringing_reef,inner_seas_patch_reef_complex,shallow_terrace
-2015-03-14,quirind1,quirindi,palma,mozambique,-10.64928903,40.58802098,2,ne,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2015-03-14,quirind2,quirindi,palma,mozambique,-10.62036501,40.61030997,3,ne,continental_fringing_reef,ocean-exposed_fringing_reef,forereef
-2015-03-15,tekamajn1,tekamajin,palma,mozambique,-10.75541801,40.64315999,3,east,continental_island,coastal_barrier_reef_complex,forereef
-2015-03-15,tekamajn2,tekamajin,palma,mozambique,-10.75634203,40.64404001,2,west,continental_island,coastal_barrier_reef_complex,shallow_terrace
-2015-10-04,ch_rubu,ch_rubu,kiunga,kenya,-1.90340599,41.417862,NA,east,,,
-2015-02-01,iweni01,iweni,pate_island,kenya,-2.2158,41.01296667,NA,w,these_all_need_doing,these_all_need_doing,
-2016-04-11,kisit_lee1,kisite_east,shimoni,kenya,-4.715047013,39.38061403,NA,,,,
-2016-04-11,kisit_lee2,kisite_east,shimoni,kenya,-4.71411,39.37610297,NA,,,,
-2015-10-04,kui,kui,kiunga,kenya,-1.828320986,41.44495499,NA,west,,,
-2015-10-05,kupi,kui,kiunga,kenya,-1.833282989,41.43640696,NA,east,,,
-2014-09-13,mm14_01_01,musha_nw,musha_is,djibouti,11.736745,43.167275,NA,nw,,,
-2014-09-14,mm14_02_01,ankali,musha_is,djibouti,11.726677,43.327323,NA,ese,,,
-2014-09-14,mm14_02_02,ankali,musha_is,djibouti,11.72516,43.312135,NA,various,,,
-2014-09-14,mm14_01_02,musha_nw,musha_is,djibouti,11.734989,43.167365,NA,nw,,,
-2014-09-15,mm14_03_01,musha_e,musha_is,djibouti,11.70485,43.219367,NA,e,,,
-2014-09-16,ob14_01_01,obock_outer,obock,djibouti,11.958617,43.313117,NA,se,,,
-2014-09-16,ob14_01_02,obock_outer,obock,djibouti,11.961101,43.320049,NA,se,,,
-2014-09-17,ob14_02_01,obock_inner,obock,djibouti,11.96846,43.320148,NA,various,,,
-2014-09-17,ob14_02_02,obock_inner,obock,djibouti,11.968558,43.31932,NA,various,,,
-2014-09-18,tn14_02_01,daley,tadjourah_n,djibouti,11.862403,43.108404,NA,se,,,
-2014-09-18,tn14_02_02,daley,tadjourah_n,djibouti,11.853533,43.09772,NA,se,,,
-2014-09-19,tn14_01_01,ras_douan_sable_blanc,tadjourah_n,djibouti,11.788433,42.967267,NA,s,,,
-2014-09-19,tn14_01_02,ras_douan_sable_blanc,tadjourah_n,djibouti,11.77873,42.921443,NA,s,,,
-2014-09-20,ts14_02_01,khorambado_dorale,tadjourah_s,djibouti,11.77873,42.921443,NA,n,,,
-2014-09-20,ts14_02_02,khorambado_dorale,tadjourah_s,djibouti,11.77873,42.921443,NA,n,,,
-2014-09-21,ts14_01_01,manta_point,tadjourah_s,djibouti,11.589092,42.875672,NA,n,,,
-2014-09-21,ts14_01_02,manta_point,tadjourah_s,djibouti,11.590468,42.865632,NA,n,,,
-2014-09-22,tn14_03_01,kalaf,tadjourah_n,djibouti,11.731252,42.773105,NA,se,,,
-2014-09-22,tn14_03_02,kalaf,tadjourah_n,djibouti,11.713678,42.763379,NA,se,,,
-2014-09-23,gb14_01_01,pte_gabrielle_parrot_is,goubet,djibouti,11.54875,42.5385,NA,ne,,,
-2014-09-23,gb14_01_02,pte_gabrielle_parrot_is,goubet,djibouti,11.493115,42.570849,NA,ne,,,
-2014-09-24,gb14_02_01,vierge_rouge,goubet,djibouti,11.510204,42.671401,NA,sw,,,
-2014-09-24,gb14_02_02,vierge_rouge,goubet,djibouti,11.504267,42.6828,NA,sw,,,
-2014-09-25,ts14_03_01,arta_plage,tadjourah_s,djibouti,11.587478,42.829101,NA,n,,,
-2014-09-25,ts14_03_02,arta_plage,tadjourah_s,djibouti,11.588636,42.844813,NA,n,,,
-2014-09-26,mm14_04_01,maskali_s,musha_is,djibouti,11.705993,43.152141,NA,ss,,,
-2014-09-26,mm14_04_02,maskali_s,musha_is,djibouti,11.708801,43.150516,NA,ss,,,
-2016-04-12,makokokwe1,makokokwe,shimoni,kenya,-4.723897967,39.33592902,NA,,,,
-2016-04-12,makokokwe2,makokokwe,shimoni,kenya,-4.721656982,39.33497599,NA,,,,
-2015-10-05,mongo_shariff,mongo_shariff,kiunga,kenya,-1.88192904,41.436945,NA,east,,,
-2015-10-06,shimo_la_tewa,shimo_la_tewa,kiunga,kenya,-2.04414703,41.24125496,NA,se,,,
+date,station,site,location,country,latitude,longitude,exposure,orientation,geology,reef_geomorphology,reeftype_old,reef_type
+2010-03-28,ambo1,ambo_inner,ambodivahibe,madagascar,-12.37121667,49.44038333,1,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,shallow_terrace
+2010-03-29,ambo2,ambo_s,ambodivahibe,madagascar,-12.35865,49.46141667,2,north,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,shallow_terrace
+2010-03-29,ambo3,ambo_s,ambodivahibe,madagascar,-12.37233333,49.44946667,2,north,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,shallow_terrace
+2010-03-30,ambo4,ambo_outer,ambodivahibe,madagascar,-12.3518,49.46475,3,north,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef
+2010-03-30,ambo5,ambo_outer,ambodivahibe,madagascar,-12.33871667,49.43623333,3,east,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef
+2010-04-07,andra17,andravina_s_pt,andravina_bay,madagascar,-12.94133333,49.86805,1,nw,continental_fringing_reef,ocean-exposed_fringing_reef,,reef_flat
+2010-04-11,anka20,ankao_nne,ankao,madagascar,-12.79138333,49.81213333,2,nw,bank,bank_lagoon,Fringing,shallow_lagoonal_terrace
+2010-04-11,anka21,ankao_s,ankao,madagascar,-12.82741667,49.81188333,2,n,bank,bank_lagoon,Fringing,shallow_lagoonal_terrace
+2010-04-13,anka21b,ankao_s,ankao,madagascar,-12.82868333,49.81375,2,n,bank,bank_lagoon,Fringing,shallow_lagoonal_terrace
+2010-04-12,anka22,ankao_ne,ankao,madagascar,-12.76676667,49.82216667,3,n,bank,bank_barrier,Fringing,forereef
+2010-04-12,anka23,ankao_nne,ankao,madagascar,-12.78185,49.811,2,nw,bank,bank_lagoon,Fringing,shallow_lagoonal_terrace
+2014-03-30,blenheim1-14,blenheim,blenheim_reef,chagos,-5.253983333,72.44605,5,sw,atoll,atoll_rim,Submerged reef,forereef
+2014-03-30,blenheim2-14,blenheim,blenheim_reef,chagos,-5.242966667,72.48263333,5,se,atoll,atoll_rim,Submerged reef,forereef
+2014-04-12,cannonpt,dgoutern,diego_garcia,chagos,-7.259416667,72.37263333,4,n,atoll,atoll_rim,Outer wall,forereef
+2010-03-15,chin1,chin,grand_comore,comoros,-11.9356,43.48603333,5,south,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2010-03-15,chin2,chin,grand_comore,comoros,-11.93485,43.48138333,5,south,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2010-03-21,feren1,feren,moheli,comoros,-12.4063,43.69545,4,south,oceanic_island,inner-seas_exposed_fringing_reef,offshore deep reef,deep_terrace
+2010-03-14,itsan1,itsan,itsandra,comoros,-11.66951667,43.26335,3,west,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2010-03-14,itsan2,itsan,itsandra,comoros,-11.66561667,43.26351667,3,west,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2010-03-20,male2,male,grand_comore,comoros,-11.86995,43.49945,5,south,oceanic_island,ocean-exposed_fringing_reef,rocky shore,forereef
+2014-04-12,courtsknoll,dglagoonn,diego_garcia,chagos,-7.26195,72.44333333,2,ne,atoll,atoll_patch,Lagoon knoll,lagoon_pinnacle
+2010-03-23,mirer1,mirereni,moheli,comoros,-12.34021667,43.64998333,3,west,oceanic_island,inner-seas_exposed_fringing_reef,Fringing,forereef
+2010-03-16,mitsam1,mitsamiouli,grand_comore,comoros,-11.37338333,43.31568333,3,north,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2014-04-10,eaglelee,eagle_lee,gt_chagos_bank,chagos,-6.1846,71.3423,2,e,atoll,atoll_lagoon,Leeward,inner_slope
+2014-04-09,eaglen,eagleout,gt_chagos_bank,chagos,-6.173233333,71.33276667,4,n,atoll,atoll_rim,Outer slope,forereef
+2014-04-09,eagles,eagleout,gt_chagos_bank,chagos,-6.199583333,71.31528333,4,nw,atoll,atoll_rim,Outer slope,forereef
+2014-04-11,egmontn,egmontin,gt_chagos_bank,chagos,-6.6346,71.32638333,4,nw,atoll,atoll_rim,Outer wall,forereef
+2014-04-11,egmonts,egmontin,gt_chagos_bank,chagos,-6.6805,71.39588333,5,e,atoll,atoll_rim,Outer slope,forereef
+2015-03-13,farol1,quiwia,palma,mozambique,-10.69706667,40.65378333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2010-03-16,mitsam2,mitsamiouli,grand_comore,comoros,-11.37903333,43.28818333,3,north,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2011-09-27,fernvlos1,fernauvloso,nacala,mozambique,-14.46953333,40.68065,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,Fringing,diffuse_fringing_reef
+2011-09-27,fernvlos2,fernauvloso,nacala,mozambique,-14.47116667,40.68085,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,Fringing,diffuse_fringing_reef
+2014-09-23,gb14_01_01,pte_gabrielle_parrot_is,goubet,djibouti,11.54875,42.5385,NA,ne,,,7,
+2014-09-23,gb14_01_02,pte_gabrielle_parrot_is,goubet,djibouti,11.493115,42.570849,NA,ne,,,8,
+2014-09-24,gb14_02_01,vierge_rouge,goubet,djibouti,11.510204,42.671401,NA,sw,,,16,
+2014-09-24,gb14_02_02,vierge_rouge,goubet,djibouti,11.504267,42.6828,NA,sw,,,12,
+2011-10-05,imboin,imbobank,pemba,mozambique,-12.94866667,40.56408333,3,nw,continental_fringing_reef,ocean-exposed_fringing_reef,Terrace&Wall,deep_terrace
+2011-10-05,imboout,imbobank,pemba,mozambique,-12.94608333,40.56653333,3,ne,continental_fringing_reef,ocean-exposed_fringing_reef,Terrace&Wall,deep_terrace
+2014-03-28,isangmid,saisle_anglaise,salomon,chagos,-5.331916667,72.21861667,4,wnw,atoll,atoll_rim,Terrace&Wall,forereef
+2014-03-27,isangsth,saisle_anglaise,salomon,chagos,-5.338383333,72.21386667,4,wnw,atoll,atoll_rim,Terrace&Wall,forereef
+2010-03-17,moindz1,moindz,grand_comore,comoros,-11.77658333,43.24103333,3,west,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2010-03-18,shom1,shomoni,grand_comore,comoros,-11.64466667,43.395,5,east,oceanic_island,ocean-exposed_fringing_reef,Fringing,forereef
+2015-10-03,ch_mvundeni,ch_mvundeni,kiunga,kenya,-1.934330016,41.3913,NA,east,,,,
+2014-03-27,jrknoll,salomon_lagoon,salomon,chagos,-5.342716667,72.22791667,2,various,atoll,atoll_patch,Lagoon knoll,lagoon_pinnacle
+2015-10-04,ch_rubu,ch_rubu,kiunga,kenya,-1.90340599,41.417862,NA,east,,,,
+2015-02-01,iweni01,iweni,pate_island,kenya,-2.2158,41.01296667,NA,w,continental_island,inner-seas_exposed_fringing_reef,Reef flat,reef_flat
+2015-03-11,kisangamungo,malinde-kiwe,malinde,mozambique,-11.304951,40.50233304,2,west,continental_patch_complex,inner_seas_patch_reef_complex,Patch,shallow_terrace
+2016-04-11,kisit_lee1,kisite_east,shimoni,kenya,-4.715047013,39.38061403,NA,ese,continental_island,inner-seas_exposed_fringing_reef,Forereef,forereef
+2016-04-11,kisit_lee2,kisite_east,shimoni,kenya,-4.71411,39.37610297,NA,ese,continental_island,inner-seas_exposed_fringing_reef,Forereef,forereef
+2015-10-04,kui,kui,kiunga,kenya,-1.828320986,41.44495499,NA,west,continental_fringing_reef,lagoon_exposed_fringing_reef,inner back reef,forereef
+2015-10-05,kupi,kui,kiunga,kenya,-1.833282989,41.43640696,NA,east,continental_fringing_reef,lagoon_exposed_fringing_reef,inner back reef,forereef
+2014-02-28,kiwe1,kiwe,lalane,mozambique,-11.11665,40.62633333,2,e,continental_patch_complex,inner_seas_patch_reef_complex,Offshore patch reef,shallow_terrace
+2015-03-06,kiwe1,kiwe,lalane,mozambique,-11.11665,40.62633333,2,east,continental_patch_complex,inner_seas_patch_reef_complex,Offshore patch reef,shallow_terrace
+2014-02-28,kiwe2,kiwe,lalane,mozambique,-11.12533333,40.61171667,2,se,continental_patch_complex,inner_seas_patch_reef_complex,Offshore patch reef,shallow_terrace
+2015-03-06,kiwe2,kiwe,lalane,mozambique,-11.12533333,40.61171667,2,east,continental_patch_complex,inner_seas_patch_reef_complex,Offshore patch reef,shallow_terrace
+2016-04-12,makokokwe1,makokokwe,shimoni,kenya,-4.723897967,39.33592902,NA,ese,continental_island,inner-seas_exposed_fringing_reef,,reef_flat
+2016-04-12,makokokwe2,makokokwe,shimoni,kenya,-4.721656982,39.33497599,NA,ese,continental_island,inner-seas_exposed_fringing_reef,,reef_flat
+2015-03-06,lalane1,lalane,lalane,mozambique,-11.14878333,40.53946667,2,east,continental_patch_complex,inner_seas_patch_reef_complex,Fringing,shallow_lagoonal_terrace
+2010-03-31,loky6,loky_s,loky,madagascar,-12.73046667,49.69643333,2,nw,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef
+2010-04-09,loky6b,loky_s,loky,madagascar,-12.73105,49.69546667,2,nw,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef
+2010-04-01,loky8,lokynw,loky,madagascar,-12.72423333,49.66738333,2,se,continental_outer_shelf_barrier,coastal_barrier_reef_complex,Fringing,diffuse_fringing_reef
+2010-04-01,loky9,lokynw,loky,madagascar,-12.70198333,49.66535,2,se,continental_outer_shelf_barrier,coastal_barrier_reef_complex,Fringing,diffuse_fringing_reef
+2015-10-05,mongo_shariff,mongo_shariff,kiunga,kenya,-1.88192904,41.436945,NA,east,,,offshore plateau,
+2015-10-06,shimo_la_tewa,shimo_la_tewa,kiunga,kenya,-2.04414703,41.24125496,NA,se,continental_island,ocean_exposed_fringing_reef,Forereef,forereef
+2009-10-16,chuma1,chumb,zanzibar,tanzania,-6.279933333,39.17395,2,north,continental_island,inner-seas_exposed_fringing_reef,Fringing,forereef
+2015-03-11,malkiwe,malinde-kiwe,malinde,mozambique,-11.30974604,40.52603798,2,west,continental_patch_complex,inner_seas_patch_reef_complex,Patch,shallow_terrace
+2009-10-16,chuma2,chumb,zanzibar,tanzania,-6.279266667,39.17416667,2,north,continental_island,inner-seas_exposed_fringing_reef,Fringing,forereef
+2011-03-26,dindi8,dindini,mafia,tanzania,-7.91805,39.82726667,5,ses,continental_fringing_reef,ocean-exposed_fringing_reef,Terrace&Wall,forereef
+2014-04-13,melitasknoll,dglagoonn,diego_garcia,chagos,-7.25095,72.41985,2,various,atoll,atoll_patch,Lagoon knoll,lagoon_pinnacle
+2010-06-21,metund1,metundflat,metundo,mozambique,-11.12465,40.67598333,2,nw,continental_island,coastal_barrier_reef_complex,Reef flat,reef_flat
+2010-06-21,metund2,metundflat,metundo,mozambique,-11.13166667,40.69601667,2,nw,continental_island,coastal_barrier_reef_complex,Reef flat,reef_flat
+2010-06-22,metund3,makungn,metundo,mozambique,-11.09873333,40.72708333,5,e,continental_island,coastal_barrier_reef_complex,Wall,deep_terrace
+2010-06-23,metund4,makungn,metundo,mozambique,-11.09865,40.72798333,5,e,continental_island,coastal_barrier_reef_complex,Wall,deep_terrace
+2010-06-23,metund5,baixo_pinguim_ne,metundo,mozambique,-11.1336,40.70335,3,ne,continental_island,coastal_barrier_reef_complex,Fringing,deep_terrace
+2010-06-24,metund6,baixo_pinguim_ne,metundo,mozambique,-11.08083333,40.66075,4,se,continental_island,coastal_barrier_reef_complex,Submerged reef,deep_terrace
+2015-03-10,metundoe,metundoe,metundo,mozambique,-11.15118097,40.70303704,4,east,continental_island,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2014-03-02,metundone1,metundo_ne,metundo,mozambique,-11.13315,40.70245,5,ne,continental_island,ocean-exposed_fringing_reef,Fringing ,forereef
+2015-03-10,metundone1,metundone,metundo,mozambique,-11.13315,40.70245,5,ne,continental_island,ocean-exposed_fringing_reef,Fringing ,forereef
+2014-03-02,metundone2,metundo_ne,metundo,mozambique,-11.13545,40.70286667,5,nee,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2014-04-08,midbrolee,mid_brotherlag,gt_chagos_bank,chagos,-6.152066667,71.52718333,2,ne,atoll,atoll_lagoon,Leeward,inner_slope
+2014-04-07,midbrowest,three_brothers,gt_chagos_bank,chagos,-6.157933333,71.5126,4,sw,atoll,atoll_rim,Terrace&Wall,forereef
+2014-04-13,middleisout,dgoutern,diego_garcia,chagos,-7.226233333,72.40843333,4,various,atoll,atoll_rim,Outer wall,forereef
+2011-03-26,dindi9,dindini,mafia,tanzania,-7.921633333,39.82505,5,ses,continental_fringing_reef,ocean-exposed_fringing_reef,Terrace&Wall,forereef
+2011-03-22,kifin32,kifinge,mafia,tanzania,-7.84965,39.8632,5,ese,continental_fringing_reef,ocean-exposed_fringing_reef,Reef slope,forereef
+2011-03-22,kifinn,kifinge,mafia,tanzania,-7.843783333,39.86655,5,ese,continental_fringing_reef,ocean-exposed_fringing_reef,Reef slope,forereef
+2014-02-28,miwona,miwona,ns._ponta,mozambique,-11.20781667,40.5244,2,se,continental_patch_complex,inner_seas_patch_reef_complex,Fringing,shallow_lagoonal_terrace
+2014-09-13,mm14_01_01,musha_nw,musha_is,djibouti,11.736745,43.167275,NA,nw,,,16,
+2014-09-14,mm14_01_02,musha_nw,musha_is,djibouti,11.734989,43.167365,NA,nw,,,16,
+2014-09-14,mm14_02_01,ankali,musha_is,djibouti,11.726677,43.327323,NA,ese,,,22,
+2014-09-14,mm14_02_02,ankali,musha_is,djibouti,11.72516,43.312135,NA,various,,,13,
+2014-09-15,mm14_03_01,musha_e,musha_is,djibouti,11.70485,43.219367,NA,e,,,7,
+2014-09-26,mm14_04_01,maskali_s,musha_is,djibouti,11.705993,43.152141,NA,ss,,,10,
+2014-09-26,mm14_04_02,maskali_s,musha_is,djibouti,11.708801,43.150516,NA,ss,,,9,
+2011-03-25,kitut1,kitutia,mafia,tanzania,-8.131683333,39.6456,3,south,continental_patch_complex,inner_seas_patch_reef_complex,Fringing,shallow_terrace
+2011-03-25,kitut2,kitutia,mafia,tanzania,-8.118833333,39.65035,2,ne,continental_patch_complex,inner_seas_patch_reef_complex,Fringing,shallow_terrace
+2011-03-24,mange1,mange,mafia,tanzania,-8.056833333,39.60428333,2,east,continental_patch_complex,inner_seas_patch_reef_complex,Offshore sand cay,shallow_terrace
+2011-03-24,mange2,mange,mafia,tanzania,-8.0787,39.59795,3,south,continental_patch_complex,inner_seas_patch_reef_complex,Offshore sand cay,shallow_terrace
+2009-10-25,mnaza1,mnazia,mnazi_outers,tanzania,-10.29486667,40.41475,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2009-10-25,mnaza2,mnazia,mnazi_outers,tanzania,-10.28918333,40.41085,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2009-10-26,mnazb1,mnazib,mnaziouterm,tanzania,-10.26611667,40.38583333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2009-10-26,mnazb2,mnazib,mnaziouterm,tanzania,-10.25835,40.3739,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2009-10-27,mnazd1,mnazid,mnaziinner,tanzania,-10.33686667,40.35586667,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,Patch reef,shallow_terrace
+2009-10-27,mnazd2,mnazid,mnaziinner,tanzania,-10.33165,40.36435,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,Patch reef,shallow_terrace
+2009-10-27,mnaze1,mnazie,mnaziinner,tanzania,-10.3163,40.36858333,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,Patch reef,shallow_terrace
+2009-10-28,mnaze2,mnazie,mnaziinner,tanzania,-10.31646667,40.3705,1,-1,continental_fringing_reef,lagoon-exposed_fringing_reef,Patch reef,shallow_terrace
+2009-10-28,mnazf1,mnazif,mnazioutern,tanzania,-10.2363,40.34351667,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2009-10-28,mnazf2,mnazif,mnazioutern,tanzania,-10.2419,40.35036667,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2014-04-02,moresby,pbisdela_passe,peros_banhos,chagos,-5.2374,71.83493333,4,ne,atoll,atoll_rim,Terrace&Wall,forereef
+2011-09-28,mutiv1,mutiva,nacala,mozambique,-14.42596667,40.72763333,2,north,continental_fringing_reef,inner-seas_exposed_fringing_reef,Fringing,forereef
+2011-09-28,mutiv2,mutiva,nacala,mozambique,-14.43128333,40.71481667,2,north,continental_fringing_reef,inner-seas_exposed_fringing_reef,Fringing,forereef
+2011-09-30,nangat1,nangata,nacala,mozambique,-14.1846,40.69366667,3,ne,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,deep_terrace
+2011-09-30,nangat2,nangata,nacala,mozambique,-14.21448333,40.78396667,4,east,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef
+2011-10-01,napala,napala,nacala,mozambique,-14.44946667,40.6774,2,north,continental_fringing_reef,inner-seas_exposed_fringing_reef,Fringing,forereef
+2009-10-17,mnema1,mnemb,zanzibar,tanzania,-5.840966667,39.39646667,4,se,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2009-10-17,mnema2,mnemb,zanzibar,tanzania,-5.83975,39.39418333,4,se,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2014-09-16,ob14_01_01,obock_outer,obock,djibouti,11.958617,43.313117,NA,se,,,15,
+2014-09-16,ob14_01_02,obock_outer,obock,djibouti,11.961101,43.320049,NA,se,,,17,
+2014-09-17,ob14_02_01,obock_inner,obock,djibouti,11.96846,43.320148,NA,various,,,7,
+2014-09-17,ob14_02_02,obock_inner,obock,djibouti,11.968558,43.31932,NA,various,,,10,
+2011-10-02,paradise,paradise,nacala,mozambique,-14.45835,40.66068333,2,east,continental_fringing_reef,inner-seas_exposed_fringing_reef,Fringing,diffuse_fringing_reef
+2014-04-04,pbbernardsh,pblagknolls,peros_banhos,chagos,-5.414833333,71.77365,2,s,atoll,atoll_lagoon,Lagoon knoll,lagoon_pinnacle
+2014-04-04,pbcoinlag1,pbcoinlagoon,peros_banhos,chagos,-5.4533,71.7767,2,n,atoll,atoll_lagoon,Fringing Lagoon,inner_slope
+2014-04-05,pbcoinlag2,pbcoinlagoon,peros_banhos,chagos,-5.449516667,71.7668,2,nne,atoll,atoll_lagoon,Fringing Lagoon,inner_slope
+2014-04-01,pbispass-06,pbisdela_passe,peros_banhos,chagos,-5.237333333,71.81498333,4,n,atoll,atoll_rim,Terrace&Wall,forereef
+2014-04-01,pblag1,pbdiamantlagoon,peros_banhos,chagos,-5.256,71.77146667,2,ese,atoll,atoll_lagoon,Fringing Lagoon,inner_slope
+2014-04-02,pblag2,pbdiamantlagoon,peros_banhos,chagos,-5.2693,71.75493333,2,ese,atoll,atoll_lagoon,Fringing Lagoon,inner_slope
+2014-04-06,pbpetitcoquill,pbpetite_coquillage,peros_banhos,chagos,-5.342933333,71.9796,5,ene,atoll,atoll_rim,Terrace&Wall,forereef
+2014-04-05,pbronankn,pblagknolls,peros_banhos,chagos,-5.4148,71.80071667,2,s,atoll,atoll_lagoon,Lagoon knoll,lagoon_pinnacle
+2011-10-04,pemba3,tunnel,pemba,mozambique,-12.96096667,40.55853333,2,east,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,diffuse_fringing_reef
+2011-10-06,pemba6,pemban,pemba,mozambique,-12.91353333,40.51966667,2,south,continental_fringing_reef,inner-seas_exposed_fringing_reef,Fringing,forereef
+2011-10-06,pemba7,pemban,pemba,mozambique,-12.92488333,40.50005,1,sw,continental_fringing_reef,inner-seas_exposed_fringing_reef,Fringing,diffuse_fringing_reef
+2011-10-03,punto_maunhane,tunnel,pemba,mozambique,-12.95965,40.55975,2,east,continental_fringing_reef,ocean-exposed_fringing_reef,Plateau,pinnacle
+2014-03-02,quifuki1,quifuki_s,quifuki,mozambique,-11.20548333,40.61575,5,s,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2015-03-14,quirind1,quirindi,palma,mozambique,-10.64928903,40.58802098,2,ne,continental_fringing_reef,ocean-exposed_fringing_reef,fringing,forereef
+2015-03-14,quirind2,quirindi,palma,mozambique,-10.62036501,40.61030997,3,ne,continental_fringing_reef,ocean-exposed_fringing_reef,Fore reef slope,forereef
+2015-03-13,quiwia,quiwia,palma,mozambique,-10.72325,40.63063333,2,south,continental_fringing_reef,inner_seas_patch_reef_complex,fringing,shallow_terrace
+2014-03-29,ronanknoll,salomon_lagoon,salomon,chagos,-5.308833333,72.25236667,2,various,atoll,atoll_patch,Lagoon knoll,lagoon_pinnacle
+2015-03-12,rongwe,palma_islands,palma,mozambique,-10.82188399,40.65679098,2,west,continental_island,coastal_barrier_reef_complex,Patch,subtidal_reef_flat
+2014-03-28,saispass1-14,saisdela_passe,salomon,chagos,-5.298616667,72.25518333,5,n,atoll,atoll_rim,Terrace&Wall,forereef
+2014-03-29,saispass2-14,saisdela_passe,salomon,chagos,-5.2986,72.2546,5,n,atoll,atoll_rim,Terrace&Wall,forereef
+2015-03-05,shauli1,metundo_nw,metundo,mozambique,-11.12168333,40.67656667,3,ne,continental_island,coastal_barrier_reef_complex,Offshore patch reef,shallow_terrace
+2014-03-01,shauli1,metundonw,metundo,mozambique,-11.12168333,40.67656667,3,nw,continental_island,coastal_barrier_reef_complex,Offshore patch reef,shallow_terrace
+2015-03-05,shauli2,metundo_nw,metundo,mozambique,-11.12011667,40.67365,3,ne,continental_island,coastal_barrier_reef_complex,Offshore patch reef,shallow_terrace
+2014-03-01,shauli2,metundonw,metundo,mozambique,-11.12011667,40.67365,3,nw,continental_island,coastal_barrier_reef_complex,Offshore patch reef,shallow_terrace
+2011-03-23,nyamn07,nyamalile,mafia,tanzania,-8.028266667,39.51086667,2,west,continental_patch_complex,inner_seas_patch_reef_complex,Large Patch reef,shallow_terrace
+2011-03-23,nyams34,nyamalile,mafia,tanzania,-8.060366667,39.52853333,2,south,continental_patch_complex,inner_seas_patch_reef_complex,Large Patch reef,subtidal_reef_flat
+2014-04-08,southbros,three_brothers,gt_chagos_bank,chagos,-6.1742,71.53916667,4,ne,atoll,atoll_rim,Terrace&Wall,forereef
+2015-03-12,tekamajis,palma_islands,palma,mozambique,-10.80747499,40.649174,2,west,continental_island,coastal_barrier_reef_complex,Patch,shallow_lagoonal_terrace
+2015-03-15,tekamajn1,tekamajin,palma,mozambique,-10.75541801,40.64315999,3,east,continental_island,coastal_barrier_reef_complex,Fore reef slope,forereef
+2015-03-15,tekamajn2,tekamajin,palma,mozambique,-10.75634203,40.64404001,2,west,continental_island,coastal_barrier_reef_complex,back reef,shallow_terrace
+2014-09-19,tn14_01_01,ras_douan_sable_blanc,tadjourah_n,djibouti,11.788433,42.967267,NA,s,,,17,
+2014-09-19,tn14_01_02,ras_douan_sable_blanc,tadjourah_n,djibouti,11.77873,42.921443,NA,s,,,16,
+2014-09-18,tn14_02_01,daley,tadjourah_n,djibouti,11.862403,43.108404,NA,se,,,10,
+2014-09-18,tn14_02_02,daley,tadjourah_n,djibouti,11.853533,43.09772,NA,se,,,8,
+2014-09-22,tn14_03_01,kalaf,tadjourah_n,djibouti,11.731252,42.773105,NA,se,,,8,
+2014-09-22,tn14_03_02,kalaf,tadjourah_n,djibouti,11.713678,42.763379,NA,se,,,6,
+2014-09-21,ts14_01_01,manta_point,tadjourah_s,djibouti,11.589092,42.875672,NA,n,,,14,
+2014-09-21,ts14_01_02,manta_point,tadjourah_s,djibouti,11.590468,42.865632,NA,n,,,14,
+2014-09-20,ts14_02_01,khorambado_dorale,tadjourah_s,djibouti,11.77873,42.921443,NA,n,,,8,
+2014-09-20,ts14_02_02,khorambado_dorale,tadjourah_s,djibouti,11.77873,42.921443,NA,n,,,13,
+2014-09-25,ts14_03_01,arta_plage,tadjourah_s,djibouti,11.587478,42.829101,NA,n,,,13,
+2014-09-25,ts14_03_02,arta_plage,tadjourah_s,djibouti,11.588636,42.844813,NA,n,,,10,
+2011-10-03,tunnel,tunnel,pemba,mozambique,-12.95805,40.55376667,2,east,continental_fringing_reef,ocean-exposed_fringing_reef,Plateau,deep_terrace
+2011-03-27,utumb12,utumbi,mafia,tanzania,-7.947616667,39.78738333,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,lagoonal reef,shallow_lagoonal_terrace
+2011-03-27,utumb13,utumbi,mafia,tanzania,-7.949133333,39.78851667,1,west,continental_fringing_reef,lagoon-exposed_fringing_reef,lagoonal reef,shallow_lagoonal_terrace
+2011-10-09,va1,vamizinr,vamizi,mozambique,-10.99563333,40.68433333,3,north,continental_island,ocean-exposed_fringing_reef,Fringing,deep_terrace
+2011-10-09,va2,vamizinu,vamizi,mozambique,-11.02225,40.64453333,2,north,continental_island,coastal_barrier_reef_complex,Fringing,deep_terrace
+2011-10-10,va3,vamizinr,vamizi,mozambique,-10.98935,40.68725,3,north,continental_island,ocean-exposed_fringing_reef,Fringing,deep_terrace
+2011-10-10,va4,vamizinu,vamizi,mozambique,-11.00726667,40.62273333,2,north,continental_island,coastal_barrier_reef_complex,Fringing,deep_terrace
+2011-10-11,va5,vamizine,vamizi,mozambique,-10.99421667,40.71341667,4,ne,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2011-10-11,va6,vamizine,vamizi,mozambique,-10.99596667,40.72005,4,ne,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2011-10-12,va7,neptunes,vamizi,mozambique,-11.09933333,40.71855,5,360,continental_island,coastal_barrier_reef_complex,Submerged reef,deep_terrace
+2011-10-12,va8,vamizine,vamizi,mozambique,-10.99668333,40.724850000000004,4,ne,continental_island,ocean-exposed_fringing_reef,Fringing,forereef
+2015-03-07,vamizine-5,vamizine,vamizi,mozambique,-10.994217,40.71341702,4,north,continental_island,coastal_barrier_reef_complex,Fore reef slope,forereef
+2015-03-07,vamizinr-3,vamizinr,vamizi,mozambique,-10.99069501,40.68838497,3,ene,continental_island,ocean-exposed_fringing_reef,Fore reef slope,deep_terrace
+2010-04-04,vohe13,vohem,vohemar_n,madagascar,-13.32646667,50.01341667,5,ese,continental_outer_shelf_barrier,coastal_barrier_reef_complex,Fringing,forereef
+2010-04-05,vohe15,vohem,vohemar_n,madagascar,-13.33491667,50.01501667,5,ese,continental_outer_shelf_barrier,coastal_barrier_reef_complex,Fringing,forereef
+2014-04-03,yeye,pbisdela_passe,peros_banhos,chagos,-5.25245,71.97558333,5,ene,atoll,atoll_rim,Terrace&Wall,forereef
+2011-03-28,yuyun10,yuyuni,mafia,tanzania,-7.98175,39.81338333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef
+2011-03-28,yuyun11,yuyuni,mafia,tanzania,-7.984416667,39.81223333,5,se,continental_fringing_reef,ocean-exposed_fringing_reef,Fringing,forereef

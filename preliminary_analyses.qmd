@@ -195,7 +195,7 @@ country_mean <- site_mean %>%
 
 ```
 
-###  Plot Mean Country Biomass
+### Plot Mean Country Biomass
 
 ...
 

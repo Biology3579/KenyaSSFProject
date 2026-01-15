@@ -62,6 +62,7 @@ coords_list <- list(
 ```
 
 ## Load functions
+
 Loads the necessary extraction functions to find, extract and process satellite-derived chlorophyll a and SST
 
 ```{r}
@@ -114,6 +115,7 @@ message(sprintf("Processing complete. Total rows extracted: %d", nrow(raw_chla_2
 ```
 
 #### Save raw chlor-a data for 2009
+
 Save the data table with the extracted chlor-a for ease of use
 
 ```{r}
@@ -139,6 +141,7 @@ locations_2009 <- read_rds(
 ```
 
 #### Find nearest satellite cells of chlor-a values to 2009 stations
+
 \[explain what this chuck is doing exactly...\]
 
 ```{r}
@@ -157,7 +160,7 @@ locations_with_sat_2009 <- assign_nearest_cell(raw_chla_2009, locations_2009)
 locations_with_chla_2009 <- compute_annual_mean(locations_with_sat_2009, raw_chla_2009, 'chla_mean', 'chla_annual_mean')
 ```
 
-### Save merged data 
+### Save merged data
 
 ```{r}
 #| label: save-merged-chla-data-2009
@@ -243,7 +246,7 @@ locations_with_sat_2018 <- assign_nearest_cell(raw_chla_2018, locations_2018)
 locations_with_chla_2018 <- compute_annual_mean(locations_with_sat_2018, raw_chla_2018, 'chla_mean', 'chla_annual_mean')
 ```
 
-### Save merged data 
+### Save merged data
 
 ```{r}
 #| label: save-merged-chla-data-218
@@ -252,7 +255,21 @@ locations_with_chla_2018 <- compute_annual_mean(locations_with_sat_2018, raw_chl
 fwrite(locations_with_chla_2018 , here::here("processed_data", "locations_with_chla_2018.csv"))
 ```
 
-## Quality checks 
+## Quality checks
+
+#### Notes on Data Quality
+
+**Important considerations:**
+
+-   This is a **monthly composite** product, which reduces cloud gaps 
+-   The spatial resolution is **4km**, so nearby sites will have similar values
+-   Missing values (NA) can occur due to:
+    -   Cloud cover
+    -   Land contamination near coastlines
+    -   Instrument issues
+    -   Data falling outside the dataset's temporal coverage (2003-present)
+
+**To handle missing data**, consider: 1. Using temporal windows (e.g., ±15 days around survey date) 2. Using 8-day composites instead of monthly for better temporal matching 3. Spatial averaging over a small window rather than single pixel extraction
 
 ### Visualise satellite match on a map for 2009
 
@@ -308,6 +325,7 @@ map_plot_2009 <- ggplot() +
 
 print(map_plot_2009)
 ```
+
 ```{r}
 #| label: visualise-sat-match-2018
 
@@ -361,7 +379,7 @@ map_plot_2018 <- ggplot() +
 print(map_plot_2018)
 ```
 
-### Match Quality Histogram 2009 
+### Match Quality Histogram 2009
 
 ```{r}
 #| label: plot-match-quality
@@ -400,7 +418,7 @@ locations_with_chla_2018 %>%
   ) +
   theme_minimal()
 ```
+
 # Sea surface temperature data (chla)
 
-SST is used as a proxy for ... It will be extracted from ... and processed like so... [general descripiton]
-
+SST is used as a proxy for ... It will be extracted from ... and processed like so... \[general descripiton\]

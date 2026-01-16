@@ -6,7 +6,7 @@ editor: visual
 
 # Overview
 
-This document explores the 2018 dataset. This data ...
+This document explores the 2009 dataset. This data ...
 
 # R Set-up
 
@@ -21,7 +21,7 @@ Use the renv::restore() to load up the necessary package versions along with the
 #| echo: false
 #| include: false
 
-#Load packages -> BAD CODE (delete once renv snapshot)
+#...
 library(tidyverse)
 library(here)
 library(dplyr)
@@ -37,7 +37,218 @@ library(MASS) # fits regression models etc.
 renv::restore()
 ```
 
-# Y variables
+
+
+#...
+
+## Load data 2009
+
+```{r}
+#| label: load data
+#| echo: false
+#| warning: false
+#| message: false
+
+fish_data_2009 <- readr::read_rds(here::here("processed_data", "clean_fish_2009.rds"))
+location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
+sst_2009 <- read.csv(here::here("processed_data", "locations_with_sst_2009.csv"))
+chla_2009 <- read.csv(here::here("processed_data", "locations_with_chla_2009.csv"))
+h_gravity_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.csv"))
+```
+
+
+### Calculate total biomass per station
+
+```{r}
+
+biomass_per_station <- fish_data_2009 %>%
+  group_by(station) %>%
+  summarise(
+    tot_biomass = sum(tot_wt_g, na.rm = TRUE),
+    site = site,
+    country = country) #%>% 
+#  summarise(
+#    mean_biomass = sum(tot_wt_g, na.rm = TRUE),
+#    site = site)
+
+biomass_per_site <- biomass_per_station %>%
+  group_by(site) %>%
+  summarise(
+    av_biomass = mean(tot_biomass, na.rm = TRUE),
+    country = country)
+
+```
+
+```{r}
+
+chla_2009_sites <- chla_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    av_annual_chla = mean(chla_annual_mean)
+  )
+
+sst_2009_sites <- sst_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    av_annual_sst = mean(sst_annual_mean)
+  )
+
+h_gravity_2009_sites <- h_gravity_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    av_annual_gravity = mean(Grav_tot)
+  )
+
+
+
+```
+
+
+
+### Linear regression
+
+
+```{r}
+#Graph the data - X-Y Scatterplot
+library(ggplot2)
+fig1 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=av_annual_chla, y=av_biomass)) + geom_point()
+fig1
+```
+
+```{r}
+#Graph the data - X-Y Scatterplot
+library(ggplot2)
+fig1 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=av_annual_sst, y=av_biomass)) + geom_point()
+fig1
+```
+
+
+
+
+
+```{r}
+#Graph the data - X-Y Scatterplot
+library(ggplot2)
+fig1 <- merge(x = biomass_per_station, y = chla_2009, by = "station", all = TRUE) %>% 
+  ggplot(aes(x=chla_annual_mean, y=tot_biomass)) + geom_point()
+fig1
+```
+```{r}
+#Graph the data - X-Y Scatterplot
+library(ggplot2)
+fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=av_annual_gravity, y=av_biomass)) + geom_point()
+fig1
+```
+
+
+
+```{r}
+library(ggplot2)
+fig2 <- merge(x = tot_biomass_per_station, y = sst_2009, by = "station", all = TRUE) %>% 
+  ggplot(aes(x=sst_annual_mean, y=tot_biomass)) + geom_point()
+fig2
+```
+
+```{r}
+library(ggplot2)
+fig3 <- merge(x = tot_biomass_per_station, y = h_gravity_2009, by = "station", all = TRUE) %>% 
+  ggplot(aes(x=Grav_tot, y=tot_biomass)) + geom_point()
+fig3
+```
+
+# Linear Model ----
+we want to fit a linear model (.;. lm() fucntion), with hardness as the response and density as the explanatory, using the janka data set
+
+```{r}
+chla_x_and_y_site <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE)
+
+model1 <- lm(av_biomass~av_annual_chla,data = chla_x_and_y_site) 
+# Analyse the model using extractor functions ----
+coef(model1) # extract coefficients
+?coef() # to get details about the function
+
+confint(model1) # extract confidence intervals
+?confint() # to get details about the function
+
+summary(model1) # summary of model, including significance values
+
+library(arm) #load package
+display(model1) #load function
+
+fig1 <- chla_x_and_y_site %>% 
+  ggplot(aes(x=av_annual_chla, y=av_biomass)) + geom_point() + geom_smooth(method=lm) #this ensures that the line is straight (as per linear regression)
+fig1
+?geom_smooth
+```
+```{r}
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+model1 <- lm(av_biomass~av_annual_sst,data = sst_x_and_y_site) 
+# Analyse the model using extractor functions ----
+coef(model1) # extract coefficients
+?coef() # to get details about the function
+
+confint(model1) # extract confidence intervals
+?confint() # to get details about the function
+
+summary(model1) # summary of model, including significance values
+
+library(arm) #load package
+display(model1) #load function
+
+fig3 <- sst_x_and_y_site %>% 
+  ggplot(aes(x=av_annual_sst, y=av_biomass)) + geom_point() + geom_smooth(method=lm) #this ensures that the line is straight (as per linear regression)
+fig3
+?geom_smooth
+```
+
+
+```{r}
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+model1 <- lm(av_biomass~av_annual_gravity,data = gravity_x_and_y_site) 
+
+# Analyse the model using extractor functions ----
+#coef(model1) # extract coefficients
+#?coef() # to get details about the function
+
+#confint(model1) # extract confidence intervals
+#?confint() # to get details about the function
+
+#summary(model1) # summary of model, including significance values
+
+library(arm) #load package
+display(model1) #load function
+
+fig2 <- gravity_x_and_y_site %>% 
+  ggplot(aes(x=av_annual_gravity, y=av_biomass)) + geom_point() + geom_smooth(method=lm) #this ensures that the line is straight (as per linear regression)
+fig2
+?geom_smooth
+```
+##By country
+```{r}
+biomass_per_country <- biomass_per_site %>%
+  group_by(country) %>%
+  summarise(
+    av_biomass = mean(av_biomass, na.rm = TRUE),)
+```
+
+```{r}
+fig1 <- biomass_per_country %>% 
+  ggplot(aes(x=country, y=av_biomass))+geom_bar(stat = "identity")
+fig1
+
+```
+
+```{r}
+model2 <- lm(av_biomass~country,data = biomass_per_country) 
+#analysing variables
+anova(model2)
+summary(model2)
+```
 
 ## Load data
 

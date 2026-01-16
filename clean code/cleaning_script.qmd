@@ -26,6 +26,7 @@ renv::restore()
 This data includes...(description of data)
 
 ## Load data
+Need to also filter for comoros, kenya and tanzania
 
 ```{r}
 #| label: load 2009-2016 data
@@ -37,9 +38,10 @@ library(readr)
 library(here)
 
 # Load 2009-2016 data 
-fish_abund_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_fish_abund.csv"))
-master_location_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_master_location.csv"))
-dive_details_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_dive_details.csv"))
+fish_abund_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_fish_abund.csv")) %>%  filter(Country == "Kenya" | Country == "Tanzania" | Country == "Comoros" )
+master_location_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_master_location.csv"))%>%  filter(Country == "Kenya" | Country == "Tanzania" | Country == "Comoros" )
+dive_details_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_dive_details.csv"))%>%  filter(Country == "Kenya" | Country == "Tanzania" | Country == "Comoros" )
+
 master_species <- read.csv(here("raw_data","master_species_2009.csv"))
 
 ```

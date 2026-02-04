@@ -1,0 +1,547 @@
+---
+title: "human_gravity_metric"
+format: html
+editor: visual
+---
+
+# Set up
+
+```{r}
+#|label: load-libraries
+#|echo: false
+
+#Load libraries 
+library(terra)      # modern raster/vector handling
+library(sf)         # vector data
+library(gdistance)  # cost-distance modelling
+library(units)
+library(raster)
+
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+```
+
+# Make friction map
+
+## Get land cover raster
+
+```{r}
+
+# Load land cover legend
+legend <- read.csv(here::here("land_cover_data", "ESACCI-LC-Legend.csv"), row.names = NULL,
+ stringsAsFactors = FALSE,
+check.names = FALSE)
+
+# Load and rasterise land cover tif file
+land_cover <- rast(here::here("land_cover_data", "ESACCI-LC-L4-LCCS-Map-300m-P5Y-2010-v1.6.1.tif"))
+crs(land_cover) <- "EPSG:4326"
+
+
+# Define area of interest (AOI)
+#aoi <- ext(37, 47, 1, -15) # actual coordinates 
+aoi <- ext(30, 50, -20,0) #slightly bigger area
+
+# Crop the land cover raster to AOI
+land_cover_crop <- crop(land_cover, aoi)
+
+# Plot cropped land cover raster 
+plot(land_cover_crop)
+
+# Behrmann is a projection from the earth spherical surface to a flat surface 
+# This line specifies how coords should be transformed (manually for consistency)
+behrmann <- "+proj=cea +lat_ts=30 +lon_0=0 +datum=WGS84 +units=m +no_defs"
+
+# Transforms land cover raster to behrmann form
+land_cover_behr <- project(
+  land_cover_crop,
+  behrmann,
+  method = "near",
+  res = 1000 # resolution = 1km
+)
+
+```
+
+## Get roads
+```{r}
+# Set bounding box for roads shapefile
+bounding_box <- st_bbox(c(
+  xmin = 30,  # lon_min
+  ymin = -20,  # lat_min
+  xmax = 50,  # lon_max
+  ymax = 0    # lat_max
+), crs = 4326)
+
+# Load world roads shapefile
+roads <- st_read(here::here("road_data", "trans-road-l.shp"))
+
+# Crop roads shapefile to region of interest
+roads <- st_crop(st_transform(roads, 4326), bounding_box)
+
+# transform to behrmann form
+roads <- st_transform(roads, behrmann)
+
+# removes all non-line features from roads (e.g. removes polygons)
+roads <- roads[st_geometry_type(roads) %in% c("LINESTRING", "MULTILINESTRING"), ]
+
+# Plot 
+plot(st_geometry(roads), col = "black", lwd = 0.3,
+     main = "VMAP0 Roads and Tracks")
+
+# Convert roads to a spatial vector suitable for use with terra operations
+roads_sp <- as(roads, "Spatial")
+roads_v  <- terra::vect(roads_sp)
+
+#Make roads 'thicker' in order to make it more continuous (set thickness to resolution which is 1km)
+roads_buf <- terra::buffer(roads_v, width = res(land_cover_behr)[1] )
+
+#build road raster
+roads_raster <- terra::rasterize(
+  roads_buf,
+  land_cover_behr,
+  field = 1,        # assign value 1 to road cells
+  touches = TRUE    # include cells touched by lines
+)
+plot(roads_raster, col = "red")
+
+```
+
+## Get shoreline shapefile
+
+```{r}
+
+# Load shoreline shapefile
+shoreline <- st_read(here::here("shoreline_data", "GSHHS_i_L1.shp"))
+
+# Convert to behrmann form
+shoreline <- st_transform(shoreline, behrmann)
+
+# Rasterise shapefile
+water_raster <- rasterize(vect(shoreline), land_cover_behr, field = 1)
+
+# Plot 
+plot(water_raster)
+```
+
+## Creating friction map
+
+```{r}
+
+# Create reference speed table
+speed_table <- data.frame(
+  land_cover_code = legend$nb_lab,  # example codes
+  speed_kmh = legend$speed
+)
+
+# set speeds on land cover
+speed <- classify(land_cover_behr, speed_table)
+
+# set speeds for roads and water
+speed[roads_raster == 1]  <- 60
+speed[water_raster != 1] <- 20
+
+# set speed for an NA cell
+speed[is.na(speed)] <- 1.4
+
+# create friction raster (ie time taken to travel a cell)
+cell_km <- res(speed)[1] / 1000
+friction <- (cell_km / speed) # Time in hours to cross a cell
+
+# Plot 
+plot(speed)
+plot(friction)
+```
+
+```{r}
+# rasterize friction surface (values = hours per km)
+friction_raster <- raster(friction)
+
+# make raster Behrmann-compatible (projected, metres)
+crs(friction_raster) <- behrmann
+
+# convert friction from hours per km -> hours per metre
+friction_raster_hpm <- friction_raster / 1000
+
+# create transition graph (conductance = metres per hour)
+transition_graph <- transition(
+  friction_raster_hpm,
+  transitionFunction = function(x) 1 / mean(x),
+  directions = 8
+)
+
+# apply geographic correction so diagonal distances are √2 × cellsize (pythagoras)
+transition_graph <- geoCorrection(transition_graph, type = "c")
+
+```
+
+```{r}
+# Function to calculate travel cost btwn two lat/lon pairs
+cost_between_points <- function(lon1, lat1, lon2, lat2,
+                                transition_graph, friction_raster) {
+
+  p1 <- st_as_sf(data.frame(lon = lon1, lat = lat1),
+                 coords = c("lon", "lat"), crs = 4326)
+  p2 <- st_as_sf(data.frame(lon = lon2, lat = lat2),
+                 coords = c("lon", "lat"), crs = 4326)
+
+  p1p <- st_transform(p1, st_crs(crs(friction_raster)))
+  p2p <- st_transform(p2, st_crs(crs(friction_raster)))
+
+  from_xy <- st_coordinates(p1p)
+  to_xy   <- st_coordinates(p2p)
+
+  as.numeric(costDistance(transition_graph, from_xy, to_xy))
+}
+```
+
+```{r}
+## TEST THE COST FUNCTION ##
+library(raster)
+library(gdistance)
+library(sf)
+
+# choose a central 10x10 window
+center_cell <- cellFromRowCol(
+  friction_raster,
+  row = round(nrow(friction_raster) / 2),
+  col = round(ncol(friction_raster) / 2)
+)
+
+rc <- rowColFromCell(friction_raster, center_cell)
+
+rows <- (rc[1] - 4):(rc[1] + 5)
+cols <- (rc[2] - 4):(rc[2] + 5)
+
+cells_10x10 <- cellFromRowColCombine(friction_raster, rows, cols)
+
+friction_10x10 <- crop(
+  friction_raster,
+  extentFromCells(friction_raster, cells_10x10)
+)
+
+friction_10x10_hpm <- friction_10x10 / 1000
+
+transition_10x10 <- transition(
+  friction_10x10_hpm,
+  transitionFunction = function(x) 1 / mean(x),  # metres per hour
+  directions = 8
+)
+
+transition_10x10 <- geoCorrection(transition_10x10, type = "c")
+
+cell_a <- 1
+cell_b <- 13
+
+xy_a <- xyFromCell(friction_10x10, cell_a)
+xy_b <- xyFromCell(friction_10x10, cell_b)
+
+p_a_ll <- st_transform(
+  st_as_sf(data.frame(x = xy_a[1], y = xy_a[2]),
+           coords = c("x", "y"),
+           crs = crs(friction_10x10)),
+  4326
+)
+
+p_b_ll <- st_transform(
+  st_as_sf(data.frame(x = xy_b[1], y = xy_b[2]),
+           coords = c("x", "y"),
+           crs = crs(friction_10x10)),
+  4326
+)
+
+lon1 <- st_coordinates(p_a_ll)[1]
+lat1 <- st_coordinates(p_a_ll)[2]
+
+lon2 <- st_coordinates(p_b_ll)[1]
+lat2 <- st_coordinates(p_b_ll)[2]
+
+time_hours <- cost_between_points(
+  lon1, lat1,
+  lon2, lat2,
+  transition_10x10,
+  friction_10x10_hpm
+)
+
+message(time_hours)
+
+plot(friction_10x10)
+points(xy_a[1], xy_a[2], col = "red", pch = 16)
+points(xy_b[1], xy_b[2], col = "blue", pch = 16)
+
+```
+
+
+
+```{r}
+#load world city data
+world_cities <- read.csv(here::here("city_data", "world_cities.csv"))
+
+#Remove cities that are too small
+cities_to_remove <- c("Mkokotoni","Mtwara", "Koani", "Lindi", "Pemba")
+world_cities <- world_cities[!world_cities$CITY_NAME %in% cities_to_remove, ]
+
+# function to convert xy coords to lat/lon
+xy_to_lonlat <- function(x, y, crs_in = 3857) {
+  st_coordinates(
+    st_transform(
+      st_as_sf(data.frame(x, y), coords = c("x", "y"), crs = crs_in),
+      4326
+    )
+  )
+}
+
+city_coords <- xy_to_lonlat(world_cities$X, world_cities$Y)
+
+# get lat lon for cities (previously only had xy coords)
+world_cities$lon <- city_coords[, 1]
+world_cities$lat <- city_coords[, 2]
+
+
+# convert cities to sf
+cities_sf <- st_as_sf(
+  world_cities,
+  coords = c("lon", "lat"),
+  crs = 4326,
+  remove = FALSE
+)
+
+
+filter_cities_bbox <- function(df, lon_min, lon_max, lat_min, lat_max) {
+  df[
+    df$lon >= lon_min & df$lon <= lon_max &
+    df$lat >= lat_min & df$lat <= lat_max,
+  ]
+}
+
+#filter cities to our wanted region
+cities_sf <- filter_cities_bbox(
+  cities_sf,
+  lon_min = 30, lon_max = 50,
+  lat_min = -20, lat_max = 0
+)
+
+
+# get world map for plotting
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# plot
+plot(st_geometry(world), xlim = c(45, 47), ylim = c(-20, 0), col = "grey90", border = "grey60")
+points(st_coordinates(cities_sf), pch = 20, cex = 0.6, col = "red")
+```
+
+```{r}
+# load reef locations data
+location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
+
+
+locations_sf <- st_as_sf(
+  location_2009,
+  coords = c("longitude", "latitude"),
+  crs = 4326,
+  remove = FALSE
+)
+
+# cities (from previous steps)
+#cities_sf <- st_as_sf(
+#  world_cities,
+#  coords = c("lon", "lat"),
+#  crs = 4326,
+#  remove = FALSE
+#)
+
+## For each reef location, find the nearest city:
+
+locations_p <- st_transform(locations_sf, 3857)
+cities_p   <- st_transform(cities_sf, 3857)
+
+#Find nearest city and update the columbs
+nearest_city_idx <- st_nearest_feature(locations_p, cities_p)
+locations_sf$nearest_city <- cities_sf$CITY_NAME[nearest_city_idx]
+locations_sf$nearest_city_lat <- cities_sf$lat[nearest_city_idx]
+locations_sf$nearest_city_lon <- cities_sf$lon[nearest_city_idx]
+locations_sf$nearest_city_pop <- 0
+locations_sf$nearest_city_cost_distance <- 0
+
+# Use graph to calculate the travel cost to that nearest city
+locations_sf$nearest_city_cost_distance <- mapply(
+  cost_between_points,
+  locations_sf$lon,
+  locations_sf$lat,
+  locations_sf$nearest_city_lon,
+  locations_sf$nearest_city_lat, 
+  MoreArgs = list(transition_graph = transition_graph, friction_raster = friction_raster)
+)
+
+unique(locations_sf$nearest_city)
+
+readr::write_rds(locations_sf,here::here("city_data","locations_sf.rds"))
+
+#write.csv(locations_sf, here::here("city_data","locations_sf.csv"))
+
+
+```
+
+defined as provincial capital cities, major population centres, landmark cities, national capitals, and ports - metropolitan area population
+
+```{r}
+# Load locations with closest cities
+locations_with_grav <- readr::read_rds(here::here("city_data", "locations_sf.rds"))
+
+# Manually set 2010 pops
+cities = c("Zanzibar","Tanga","Dar es Salaam","Mombasa","Kismaayo", "Moroni")
+pops =  c(460000,    260000,  3870000,        940000,    296000,   54000)
+
+locations_with_grav$nearest_city_pop <- pops[match(locations_with_grav$nearest_city, cities)]
+
+locations_with_grav$market_grav = locations_with_grav$nearest_city_pop / (locations_with_grav$nearest_city_cost_distance ** 2)
+
+```
+
+# Settlement Gravity 
+This is getting the sum of the population in a 50km radius
+
+```{r}
+# Load raster
+landscan <- rast(here::here("city_data", "landscan-global-2010.tif"))
+
+
+# Crop (optional)
+landscan_crop <- crop(landscan, aoi)
+plot(landscan_crop,)
+
+
+# Convert points
+points <- vect(
+  location_2009,
+  geom = c("longitude", "latitude"),
+  crs = "EPSG:4326"
+)
+# Project BOTH raster and points to a metric CRS
+landscan_m <- project(landscan_crop, "EPSG:54009")   # World Mollweide
+points_m   <- project(points, crs(landscan_m))
+
+# Create 50 km buffers (meters!)
+buffers <- buffer(points_m, width = 50000)
+
+# Extract population
+pop_sum <- extract(
+  landscan_m,
+  buffers,
+  fun = sum,
+  na.rm = TRUE
+)
+
+# Assign correctly by name
+locations_with_grav$settlement_tot_pop <- pop_sum$lspop2010
+```
+
+
+This gets the nearest cell with population density 75
+```{r}
+# Initialise columns to NA
+locations_with_grav$nearest_pop75_lon <- NA_real_
+locations_with_grav$nearest_pop75_lat <- NA_real_
+locations_with_grav$nearest_pop75_dist_km <- NA_real_
+
+# Try to find the nearest 75 pop cell by progressively increasing search radius
+threshold <- 75
+start_radius <- 5000    # 5 km
+step_radius  <- 5000    # increase by 5 km
+max_radius   <- 200000
+for (i in 1:length(locations_with_grav$latitude)) {
+
+  # Point in lon/lat
+  pt_ll <- vect(
+    data.frame(
+      x = locations_with_grav$longitude[i],
+      y = locations_with_grav$latitude[i]
+    ),
+    geom = c("x", "y"),
+    crs = "EPSG:4326"
+  )
+
+  # Local UTM CRS
+  utm_zone <- floor((locations_with_grav$longitude[i] + 180) / 6) + 1
+  epsg_utm <- ifelse(
+    locations_with_grav$latitude[i] >= 0,
+    32600 + utm_zone,
+    32700 + utm_zone
+  )
+
+  # Project point
+  pt_m <- project(pt_ll, paste0("EPSG:", epsg_utm))
+
+  found <- FALSE
+  radius <- start_radius
+
+  while (!found && radius <= max_radius) {
+
+    # Buffer
+    buf <- buffer(pt_m, width = radius)
+
+    # Crop raster locally
+    landscan_m <- project(landscan_crop, crs(pt_m))
+    sub <- crop(landscan_m, buf)
+
+    # Get cells above threshold
+    idx <- which(values(sub) > threshold)
+
+    if (length(idx) > 0) {
+
+      # Coordinates of candidate cells
+      cell_xy <- xyFromCell(sub, idx)
+
+      # Distances to point
+      d <- sqrt((cell_xy[,1] - crds(pt_m)[1,1])^2 +
+                (cell_xy[,2] - crds(pt_m)[1,2])^2)
+
+      j <- which.min(d)
+
+      # Store result
+      nearest_xy_m <- cell_xy[j, ]
+
+      nearest_pt_m <- vect(
+        data.frame(x = nearest_xy_m[1], y = nearest_xy_m[2]),
+        geom = c("x", "y"),
+        crs = crs(pt_m)
+      )
+
+      nearest_pt_ll <- project(nearest_pt_m, "EPSG:4326")
+
+      coords <- crds(nearest_pt_ll)
+
+      locations_with_grav$nearest_pop75_lon[i] <- coords[1,1]
+      locations_with_grav$nearest_pop75_lat[i] <- coords[1,2]
+      locations_with_grav$nearest_pop75_dist_km[i] <- min(d) / 1000
+
+      found <- TRUE
+    }
+
+    radius <- radius + step_radius
+  }
+}
+
+```
+
+```{r}
+locations_with_grav$nearest_pop_cost_distance <- mapply(
+  cost_between_points,
+  locations_with_grav$lon,
+  locations_with_grav$lat,
+  locations_with_grav$nearest_pop75_lon,
+  locations_with_grav$nearest_pop75_lat, 
+  MoreArgs = list(transition_graph = transition_graph, friction_raster = friction_raster)
+)
+
+#Set a minimum value of 0.005 (as some are 0)
+locations_with_grav$nearest_pop_cost_distance <- pmax(locations_with_grav$nearest_pop_cost_distance, 0.005)
+
+locations_with_grav$nearest_pop75_grav = 75 / (locations_with_grav$nearest_city_cost_distance ** 2)
+```
+
+```{r}
+readr::write_rds(locations_sf,here::here("city_data","locations_with_grav.rds"))
+```
+
+#Test metrics against biomass 
+

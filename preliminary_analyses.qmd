@@ -21,8 +21,9 @@ Use the renv::restore() to load up the necessary package versions along with the
 #| echo: false
 #| include: false
 
-#...
+#Load require libraries
 library(tidyverse)
+library(arm)
 library(here)
 library(dplyr)
 library(tidyverse)
@@ -37,17 +38,12 @@ library(MASS) # fits regression models etc.
 renv::restore()
 ```
 
+# 2009-2015 data
 
-
-#...
-
-## Load data 2009
+## Load data for 2009-2015
 
 ```{r}
-#| label: load data
-#| echo: false
-#| warning: false
-#| message: false
+#| label: load-data
 
 fish_data_2009 <- readr::read_rds(here::here("processed_data", "clean_fish_2009.rds"))
 location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
@@ -57,198 +53,416 @@ h_gravity_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.
 ```
 
 
-### Calculate total biomass per station
+##join reef geomoirphology
 
 ```{r}
+location_subset <- location_2009[, c("station", "country")]
+fish_2009 <- fish_data_2009 %>%
+  left_join(location_subset, by = "station")
+```
 
-biomass_per_station <- fish_data_2009 %>%
+## Total Biomass
+
+This refers to an aggregate of all species.
+
+### Calculate total biomass per station, site, and country
+
+```{r}
+#| label: calculate-total-data
+
+# Mean biomass per station
+biomass_per_station <- fish_2009 %>%
   group_by(station) %>%
   summarise(
-    tot_biomass = sum(tot_wt_g, na.rm = TRUE),
-    site = site,
-    country = country) #%>% 
-#  summarise(
-#    mean_biomass = sum(tot_wt_g, na.rm = TRUE),
-#    site = site)
+    mean_tot_biomass = mean(tot_wt_g, na.rm = TRUE),
+    site = first(site),
+    geomorphology = first(reef_geomorphology),
+    country = first(country), 
+    .groups = "drop")
 
+# Mean biomass per site
 biomass_per_site <- biomass_per_station %>%
   group_by(site) %>%
   summarise(
-    av_biomass = mean(tot_biomass, na.rm = TRUE),
-    country = country)
+    mean_biomass = mean(mean_tot_biomass),
+    geomorphology = first(geomorphology),
+    country = first(country))
 
-```
-
-```{r}
-
-chla_2009_sites <- chla_2009 %>% 
-  group_by(site) %>% 
-  summarise(
-    av_annual_chla = mean(chla_annual_mean)
-  )
-
-sst_2009_sites <- sst_2009 %>% 
-  group_by(site) %>% 
-  summarise(
-    av_annual_sst = mean(sst_annual_mean)
-  )
-
-h_gravity_2009_sites <- h_gravity_2009 %>% 
-  group_by(site) %>% 
-  summarise(
-    av_annual_gravity = mean(Grav_tot)
-  )
-
-
-
-```
-
-
-
-### Linear regression
-
-
-```{r}
-#Graph the data - X-Y Scatterplot
-library(ggplot2)
-fig1 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
-  ggplot(aes(x=av_annual_chla, y=av_biomass)) + geom_point()
-fig1
-```
-
-```{r}
-#Graph the data - X-Y Scatterplot
-library(ggplot2)
-fig1 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
-  ggplot(aes(x=av_annual_sst, y=av_biomass)) + geom_point()
-fig1
-```
-
-
-
-
-
-```{r}
-#Graph the data - X-Y Scatterplot
-library(ggplot2)
-fig1 <- merge(x = biomass_per_station, y = chla_2009, by = "station", all = TRUE) %>% 
-  ggplot(aes(x=chla_annual_mean, y=tot_biomass)) + geom_point()
-fig1
-```
-```{r}
-#Graph the data - X-Y Scatterplot
-library(ggplot2)
-fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
-  ggplot(aes(x=av_annual_gravity, y=av_biomass)) + geom_point()
-fig1
-```
-
-
-
-```{r}
-library(ggplot2)
-fig2 <- merge(x = tot_biomass_per_station, y = sst_2009, by = "station", all = TRUE) %>% 
-  ggplot(aes(x=sst_annual_mean, y=tot_biomass)) + geom_point()
-fig2
-```
-
-```{r}
-library(ggplot2)
-fig3 <- merge(x = tot_biomass_per_station, y = h_gravity_2009, by = "station", all = TRUE) %>% 
-  ggplot(aes(x=Grav_tot, y=tot_biomass)) + geom_point()
-fig3
-```
-
-# Linear Model ----
-we want to fit a linear model (.;. lm() fucntion), with hardness as the response and density as the explanatory, using the janka data set
-
-```{r}
-chla_x_and_y_site <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE)
-
-model1 <- lm(av_biomass~av_annual_chla,data = chla_x_and_y_site) 
-# Analyse the model using extractor functions ----
-coef(model1) # extract coefficients
-?coef() # to get details about the function
-
-confint(model1) # extract confidence intervals
-?confint() # to get details about the function
-
-summary(model1) # summary of model, including significance values
-
-library(arm) #load package
-display(model1) #load function
-
-fig1 <- chla_x_and_y_site %>% 
-  ggplot(aes(x=av_annual_chla, y=av_biomass)) + geom_point() + geom_smooth(method=lm) #this ensures that the line is straight (as per linear regression)
-fig1
-?geom_smooth
-```
-```{r}
-sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
-
-model1 <- lm(av_biomass~av_annual_sst,data = sst_x_and_y_site) 
-# Analyse the model using extractor functions ----
-coef(model1) # extract coefficients
-?coef() # to get details about the function
-
-confint(model1) # extract confidence intervals
-?confint() # to get details about the function
-
-summary(model1) # summary of model, including significance values
-
-library(arm) #load package
-display(model1) #load function
-
-fig3 <- sst_x_and_y_site %>% 
-  ggplot(aes(x=av_annual_sst, y=av_biomass)) + geom_point() + geom_smooth(method=lm) #this ensures that the line is straight (as per linear regression)
-fig3
-?geom_smooth
-```
-
-
-```{r}
-gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
-
-model1 <- lm(av_biomass~av_annual_gravity,data = gravity_x_and_y_site) 
-
-# Analyse the model using extractor functions ----
-#coef(model1) # extract coefficients
-#?coef() # to get details about the function
-
-#confint(model1) # extract confidence intervals
-#?confint() # to get details about the function
-
-#summary(model1) # summary of model, including significance values
-
-library(arm) #load package
-display(model1) #load function
-
-fig2 <- gravity_x_and_y_site %>% 
-  ggplot(aes(x=av_annual_gravity, y=av_biomass)) + geom_point() + geom_smooth(method=lm) #this ensures that the line is straight (as per linear regression)
-fig2
-?geom_smooth
-```
-##By country
-```{r}
+# Mean biomass per country
 biomass_per_country <- biomass_per_site %>%
   group_by(country) %>%
   summarise(
-    av_biomass = mean(av_biomass, na.rm = TRUE),)
+    mean_biomass = mean(mean_biomass, na.rm = TRUE))
+
+# Mean biomass per geomorphology
+biomass_per_geomorphology <- biomass_per_site %>%
+  group_by(geomorphology) %>%
+  summarise(
+    mean_biomass = mean(mean_biomass, na.rm = TRUE))
+
+```
+
+### Calculate env. variable means
+
+```{r}
+#| label: calculate-env-var-means
+
+# Calculate mean chla per site
+chla_2009_sites <- chla_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    mean_annual_chla = mean(chla_annual_mean))
+
+# Calculate mean SST per site
+sst_2009_sites <- sst_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    mean_annual_sst = mean(sst_annual_mean))
+
+# Calculate mean human gravity per site
+h_gravity_2009_sites <- h_gravity_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    mean_gravity = mean(Grav_tot))
+```
+
+### Linear regressions
+
+#### Biomass vs Country (Ecoregion)
+
+```{r}
+#| label: biomass-by-country-plot
+
+# Graph the data - Bar chart
+biomass_country_fig1 <- biomass_per_country %>% 
+  ggplot(aes(x=country, y=mean_biomass))+
+  geom_bar(stat = "identity")
+
+biomass_country_fig1
+
 ```
 
 ```{r}
-fig1 <- biomass_per_country %>% 
-  ggplot(aes(x=country, y=av_biomass))+geom_bar(stat = "identity")
-fig1
+#| label: biomass-vs-country-lm
+
+# Build lm 
+model1 <- lm(mean_biomass ~ country, data = biomass_per_site)
+anova(model1)
 
 ```
 
+Clearly country (or rather eco-region is very significant). I should therefore account for this in my model...
+
+#### Biomass vs Geomorphology
+
 ```{r}
-model2 <- lm(av_biomass~country,data = biomass_per_country) 
-#analysing variables
+# Graph the data - Bar chart
+biomass_geomorphology_fig1 <- biomass_per_geomorphology %>% 
+  ggplot(aes(x=geomorphology, y=mean_biomass))+
+  geom_bar(stat = "identity")
+
+biomass_geomorphology_fig1
+```
+
+```{r}
+#| label: biomass-vs-geomorphology-lm
+
+# Build lm 
+model2 <- lm(mean_biomass ~ geomorphology, data = biomass_per_site)
 anova(model2)
-summary(model2)
+
 ```
+
+## checking whether geomorphology is nested in country
+
+```{r}
+table(biomass_per_site$country, biomass_per_site$geomorphology)
+```
+
+##visualise
+
+```{r}
+ggplot(biomass_per_site, aes(country, geomorphology)) +
+  geom_count() +
+  scale_size_area()
+
+```
+
+## quantify association
+
+```{r}
+chisq.test(
+  table(biomass_per_site$country, biomass_per_site$geomorphology)
+)
+
+```
+
+## now test unique contributions.
+
+```{r}
+model_full <- lm(mean_biomass ~ country + geomorphology,
+                 data = biomass_per_site)
+
+anova(model_full)
+```
+
+```{r}
+model_country <- lm(mean_biomass ~ country,
+                    data = biomass_per_site)
+
+model_geom    <- lm(mean_biomass ~ geomorphology,
+                    data = biomass_per_site)
+
+anova(model_country, model_full)
+anova(model_geom, model_full)
+
+```
+
+##AIC
+
+```{r}
+AIC(model_country, model_geom, model_full)
+```
+
+According to this the model_country is better!
+
+#### viauslise within country geomoprhology effects
+
+```{r}
+ggplot(biomass_per_site,
+       aes(geomorphology, mean_biomass)) +
+  geom_boxplot() +
+  facet_wrap(~ country, scales = "free_x")
+```
+
+```{r}
+lmer(mean_biomass ~ geomorphology + (1 | country), data = biomass_per_site)
+```
+
+#### Biomass vs Chlorophyll-a
+
+##### Plot
+
+```{r}
+#| label: biomass-vs-chla-plot
+
+# Graph the data - X-Y scatterplot
+biomass_chla_fig1 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_chla, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_chla_fig1
+
+biomass_chla_fig2 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_annual_chla, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_chla_fig2
+
+
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-chla-lm
+
+# Merge needed data
+chla_x_and_y_site <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_chla <- lm(log(mean_biomass)~mean_annual_chla,data = chla_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_chla) 
+arm::display(lm_biomass_chla) #load function
+
+library(lme4)
+
+model_chla <- lmer(
+  log(mean_biomass) ~ mean_annual_chla + (1 | country),
+  data = merge(biomass_per_site, chla_2009_sites, by = "site")
+)
+
+summary(model_chla)
+
+
+```
+
+#### Biomass vs SST
+
+##### Plot
+
+```{r}
+#| label: biomass-vs-sst-plot
+
+# Graph the data - X-Y scatterplot
+biomass_sst_fig1 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_sst, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_sst_fig1
+
+
+biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_annual_sst, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_sst_fig2
+```
+
+##log
+
+```{r}
+#| label: biomass-vs-sst-plot
+
+# Graph the data - X-Y scatterplot
+biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_sst, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_sst_fig2
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-sst-lm
+
+# Merge needed data
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_sst <- lm(mean_biomass~mean_annual_sst,data = sst_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_sst) 
+```
+
+## Log
+
+```{r}
+
+# Merge needed data
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_sst <- lm(log(mean_biomass)~mean_annual_sst,data = sst_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_sst)
+
+
+library(lme4)
+
+model_sst <- lmer(
+  log(mean_biomass) ~ mean_annual_sst + (1 | country),
+  data = merge(biomass_per_site, sst_2009_sites, by = "site")
+)
+
+summary(model_sst)
+```
+
+#### Biomass vs Gravity
+
+##### Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig1
+
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_gravity, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_gravity_fig2
+```
+
+## log
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig2
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(mean_biomass~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```
+
+### Log
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(log(mean_biomass)~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```
+
+### accountign for country
+
+```{r}
+
+library(lme4)
+
+model_sst <- lmer(
+  log(mean_biomass) ~ mean_gravity + (1 | country),
+  data = gravity_x_and_y_site)
+
+summary(model_sst)
+```
+
+```{r}
+# fix
+analysis_2009 <- biomass_per_site %>%
+  left_join(location_subset, by = "site") %>%
+  left_join(chla_x_and_y_site, by = "site") %>%
+  left_join(sst_x_and_y_site, by = "site") %>%
+  left_join(gravity_x_and_y_site,  by = "site")
+
+
+m_fixed <- lm(log(biomass) ~ sst + chla + gravity, data = data)
+
+#vs
+m_mixed <- lmer(log(biomass) ~ sst + chla + gravity + (1 | country), data = data)
+
+
+```
+
+# 2018 data (to do)
 
 ## Load data
 

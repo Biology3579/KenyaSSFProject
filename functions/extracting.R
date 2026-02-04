@@ -29,7 +29,7 @@ library(ncdf4)
 ## Processing extarcted data files ----
 
 ### A function to parse the date from filename ----
-# Extracts first 8-digit sequence (YYYYMMDD) from the HDF5-NetCDF file and returns it as a date
+# Extracts first 8-digit sequence (YYYYMMDD) from the NetCDF file and returns it as a date
 
 parse_date <- function(filename) {
   date_str <- stringr::str_extract(filename, "\\d{8}")
@@ -38,8 +38,7 @@ parse_date <- function(filename) {
 }
 
 
-## A function to extract lat and lon from the OCNET satellite files ----
-  # need to revisit this!! ...
+## A function to extract metric (e.g chla or SST) and coordinate information from extracted satellite files ----
 extract_sat_data <- function(filepath,
                                  lon_name = "lon",
                                  lat_name = "lat",
@@ -56,8 +55,8 @@ extract_sat_data <- function(filepath,
   
   # map indices to coordinates
   dt <- data.table(
-    lon = lon[idx[, 1]],  # column index → longitude
-    lat = lat[idx[, 2]],   # row index    → latitude
+    lon = lon[idx[, 1]],  # first column in index → longitude
+    lat = lat[idx[, 2]],  # second column in index → latitude
     value = metric[idx]
   )[
     # add metadata
@@ -66,17 +65,12 @@ extract_sat_data <- function(filepath,
       source_file = basename(filepath)
     )
   ]
-  
   setnames(dt, "value", metric_name)
-  
-
-  
   dt
 }
 
 
 ## A function that assigns to each station, the nearest satellite cell (store lat/lon and distance to cell) ----
-
 assign_nearest_cell <- function(raw_sat_data, clean_locations){
   
   unique_cells <- raw_sat_data %>% distinct(lat, lon)
@@ -123,7 +117,6 @@ compute_annual_mean <- function(clean_locations, raw_sat_data, metric_name, metr
     
     # end = last day of the reference month
     end_month <- ceiling_date(date, "month") - days(1)
-    
 
     relevant_cells <- raw_sat_data %>%
       filter(

@@ -15,12 +15,7 @@ locations_2009 <- read_rds(here::here("processed_data", "clean_location_2009.rds
 locations_2018 <- read_rds(here::here("processed_data", "clean_location_2018.rds"))
 
 
-#Explore the location of the sites by country
-
-# Filter for Kenya, Comoros and Tanzania in 2009 dataset
-##2009
-stations_2009 <- locations_2009 %>%
-  filter(country == "kenya" | country == "tanzania" | country == "comoros" ) 
+# Visually explore the location of the stations by country
 
 # Get map data for Kenya and surrounding region
 
@@ -36,7 +31,7 @@ focus_region <- world %>%
   filter(admin %in% c("Kenya", "Tanzania", "Comoros"))
 
 # Create the map with a tighter zoom
-map_plot<- ggplot2() +
+map_plot<- ggplot() +
   
   # Plot all countries in Africa as the base layer
   geom_sf(data = world[world$continent == "Africa",], 
@@ -47,7 +42,7 @@ map_plot<- ggplot2() +
   geom_point(data = locations_2009$station, groupby(country),
              aes(x = longitude, y = latitude, ),
              alpha = 0.6, color = "#440154") +
-            # each country gets a different 
+  # each country gets a different 
   geom_point(data = , 
              aes(x = longitude, y = latitude, size = n_observations),
              alpha = 0.6, color = "#440154") +
@@ -72,11 +67,52 @@ map_plot<- ggplot2() +
 print(map_plot_2009)
 
 
-# 2009 ----
+# find true sites
+# this finds stations that are within 4km of each other to define the sites 
+radius <- 1000  # metres
 
-## filter countries in 2009 to Kenya, Comoros and Tanzania
-filtered_2009 <- locations_2009 %>% 
-  filter(country =="kenya"  |country == "comoros" | country =="tanzania" ) 
+#fucntion to get overlaps
+do_overlap <- function(lat1, lon1, lat2, lon2, radius){
+  dist <- coord_distance(lat1, lat2, lon1, lon2)
+  dist < (2 * radius)
+}
+
+# initialise station-level clustering table
+station_areas_2009 <- stations_2009 %>%
+  mutate(
+    radius = radius,
+    cluster_id = 0
+  )
+
+#cluster circles tat overlap
+next_id <- 1
+n <- nrow(station_areas_2009)
+
+for (i in 1:(n - 1)) {
+  for (j in (i + 1):n) {
+    
+    # assign a cluster to i if it doesn't have one
+    if (station_areas_2009$cluster_id[i] == 0) {
+      station_areas_2009$cluster_id[i] <- next_id
+      current_id <- next_id
+      next_id <- next_id + 1
+    } else {
+      current_id <- station_areas_2009$cluster_id[i]
+    }
+    
+    lat1 <- station_areas_2009$latitude[i]
+    lon1 <- station_areas_2009$longitude[i]
+    lat2 <- station_areas_2009$latitude[j]
+    lon2 <- station_areas_2009$longitude[j]
+    
+    if (do_overlap(lat1, lon1, lat2, lon2, radius)) {
+      station_areas_2009$cluster_id[j] <- current_id
+    }
+  }
+}
+
+
+# find overlapping sites
 
 #find the centre of the coordinates
 centroid_pts <- function(lats, longs){
@@ -130,7 +166,7 @@ coord_distance <- function(lat1, lat2, lon1, lon2) {
 
 # compute site areas 
 #  this draws a circle around the mean of multiple stations and finds the furthest station to make the radius for the circle
-site_areas_2009 <- filtered_2009 %>% 
+site_areas_2009 <- stations_2009 %>% 
   group_by(site) %>% 
   summarise(
     centre_latitude = centroid_pts(latitude, longitude)[2],
@@ -172,6 +208,35 @@ do_overlap <- function(lat1, lon1, rad1, lat2, lon2, rad2 ){
   }
   
 }
+
+# clusters stations within the 2009 dataset (to check if any overlap within 1km of each other)
+next_id <- 1
+for (i in 1:(length(site_areas_2009$cluster_id)-1)){
+  for (j in (i+1):length(site_areas_2009$cluster_id)){
+    # compare rows i and j (do they overlap)
+    current_id = next_id
+    if (site_areas_2009$cluster_id[i] == 0){
+      site_areas_2009$cluster_id[i] = current_id
+      next_id = next_id + 1
+    }
+    else{
+      current_id = site_areas_2009$cluster_id[i]
+    }
+    
+    lat1 = site_areas_2009$centre_latitude[i]
+    lon1 = site_areas_2009$centre_longitude[i]
+    rad1 = site_areas_2009$radius[i]
+    lat2 = site_areas_2009$centre_latitude[j]
+    lon2 = site_areas_2009$centre_longitude[j]
+    rad2 = site_areas_2009$radius[j]
+    
+    if (do_overlap(lat1, lon1, rad1, lat2, lon2, rad2 ) == TRUE){
+      site_areas_2009$cluster_id[j] = current_id
+    }
+  }
+}
+
+
 
 # clusters sites within the 2018 dataset (to check if any overlap within 1km of each other)
 next_id <- 1
@@ -221,4 +286,5 @@ for (i in 1:length(site_areas_2009$cluster_id)){
     }
   }
 }
+
 

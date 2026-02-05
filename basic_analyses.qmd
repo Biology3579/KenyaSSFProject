@@ -4,7 +4,8 @@ format: html
 editor: visual
 ---
 
-#
+# 
+
 # Overview
 
 This document explores the 2009 dataset. This data ...
@@ -13,8 +14,8 @@ This document explores the 2009 dataset. This data ...
 
 *Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
 
-Load the necessary packages (these can be found in ...)
-## Packages
+Load the necessary packages (these can be found in ...) \## Packages
+
 ```{r}
 #| label: r set-up
 #| echo: false
@@ -28,6 +29,7 @@ library(tidyr)
 ```
 
 ## Set working space
+
 Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
 
 ```{r}
@@ -48,6 +50,7 @@ h_gravity_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.
 ```
 
 ## Functions
+
 ```{r}
 descriptive_stats <- function(x) {
   x <- x[!is.na(x)]
@@ -68,6 +71,7 @@ descriptive_stats <- function(x) {
 # Descriptive stats
 
 # Biomass per site - assuming independent variables
+
 ```{r}
 transect_biomass <- fish_data_2009 %>%
   group_by(location, site, ts_no) %>%
@@ -96,9 +100,8 @@ transect_biomass <- fish_data_2009 %>%
 
 ```
 
-
-
 # By location
+
 ```{r}
 site_biomass <- fish_data_2009 %>%
   group_by(country, location, site) %>%
@@ -112,8 +115,8 @@ site_biomass <- fish_data_2009 %>%
   summarise(descriptive_stats(tot_biomass), .groups = "drop"))
 ```
 
-
 # By reef geomorphology
+
 ```{r}
 fish_2009 <- fish_data_2009 %>%
   left_join(
@@ -135,20 +138,15 @@ site_biomass_geo <- fish_2009 %>%
   group_by(reef_geomorphology) %>%
   summarise(descriptive_stats(tot_biomass), .groups = "drop"))
 ```
-As show by the table, mean biomass differs somewhat among geomoprhologies but not greatly.
-i.e. geomorphology explains some but not the dominant variation.
 
-In terms of the variance:
-Some geomorphologies (patch reef complexes) are internally very coherent
-Others (especially lagoon-exposed fringing reefs) are highly variable
-This suggests that geomorphology is not the driver of variation 
+As show by the table, mean biomass differs somewhat among geomoprhologies but not greatly. i.e. geomorphology explains some but not the dominant variation.
+
+In terms of the variance: Some geomorphologies (patch reef complexes) are internally very coherent Others (especially lagoon-exposed fringing reefs) are highly variable This suggests that geomorphology is not the driver of variation
 
 If you compare with location, geomorphology explians far less variation - so not a niche enough group to include as a random effect.
 
-
-
-
 # By country
+
 ```{r}
 (total_biomass_by_country <- site_biomass %>%
   group_by(country) %>%
@@ -158,6 +156,7 @@ If you compare with location, geomorphology explians far less variation - so not
 # Spatial auto-correlation checks
 
 ## stations
+
 ```{r}
 fish_2009_2 <- fish_data_2009 %>%
   left_join(
@@ -204,5 +203,3 @@ nb_station <- dnearneigh(
 lw_station <- nb2listw(nb_station, style = "W", zero.policy = TRUE)
 
 ```
-
-

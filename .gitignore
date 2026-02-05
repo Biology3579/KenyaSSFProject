@@ -1,6 +1,6 @@
 # large data files
-.tif
-.dbf
+*.tif
+*.dbf
 
 # History files
 .Rhistory

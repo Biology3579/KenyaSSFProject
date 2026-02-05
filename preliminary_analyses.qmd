@@ -52,11 +52,10 @@ chla_2009 <- read.csv(here::here("processed_data", "locations_with_chla_2009.csv
 h_gravity_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.csv"))
 ```
 
-
 ##join reef geomoirphology
 
 ```{r}
-location_subset <- location_2009[, c("station", "country")]
+location_subset <- location_2009[, c("station", "reef_geomorphology")]
 fish_2009 <- fish_data_2009 %>%
   left_join(location_subset, by = "station")
 ```
@@ -76,6 +75,7 @@ biomass_per_station <- fish_2009 %>%
   summarise(
     mean_tot_biomass = mean(tot_wt_g, na.rm = TRUE),
     site = first(site),
+    location = first(location),
     geomorphology = first(reef_geomorphology),
     country = first(country), 
     .groups = "drop")
@@ -85,6 +85,7 @@ biomass_per_site <- biomass_per_station %>%
   group_by(site) %>%
   summarise(
     mean_biomass = mean(mean_tot_biomass),
+    location = first(location),
     geomorphology = first(geomorphology),
     country = first(country))
 
@@ -128,125 +129,52 @@ h_gravity_2009_sites <- h_gravity_2009 %>%
 
 ### Linear regressions
 
-#### Biomass vs Country (Ecoregion)
-
-```{r}
-#| label: biomass-by-country-plot
-
-# Graph the data - Bar chart
-biomass_country_fig1 <- biomass_per_country %>% 
-  ggplot(aes(x=country, y=mean_biomass))+
-  geom_bar(stat = "identity")
-
-biomass_country_fig1
-
-```
-
-```{r}
-#| label: biomass-vs-country-lm
-
-# Build lm 
-model1 <- lm(mean_biomass ~ country, data = biomass_per_site)
-anova(model1)
-
-```
-
-Clearly country (or rather eco-region is very significant). I should therefore account for this in my model...
-
-#### Biomass vs Geomorphology
-
-```{r}
-# Graph the data - Bar chart
-biomass_geomorphology_fig1 <- biomass_per_geomorphology %>% 
-  ggplot(aes(x=geomorphology, y=mean_biomass))+
-  geom_bar(stat = "identity")
-
-biomass_geomorphology_fig1
-```
-
-```{r}
-#| label: biomass-vs-geomorphology-lm
-
-# Build lm 
-model2 <- lm(mean_biomass ~ geomorphology, data = biomass_per_site)
-anova(model2)
-
-```
-
-## checking whether geomorphology is nested in country
-
-```{r}
-table(biomass_per_site$country, biomass_per_site$geomorphology)
-```
-
-##visualise
-
-```{r}
-ggplot(biomass_per_site, aes(country, geomorphology)) +
-  geom_count() +
-  scale_size_area()
-
-```
-
-## quantify association
-
-```{r}
-chisq.test(
-  table(biomass_per_site$country, biomass_per_site$geomorphology)
-)
-
-```
-
-## now test unique contributions.
-
-```{r}
-model_full <- lm(mean_biomass ~ country + geomorphology,
-                 data = biomass_per_site)
-
-anova(model_full)
-```
-
-```{r}
-model_country <- lm(mean_biomass ~ country,
-                    data = biomass_per_site)
-
-model_geom    <- lm(mean_biomass ~ geomorphology,
-                    data = biomass_per_site)
-
-anova(model_country, model_full)
-anova(model_geom, model_full)
-
-```
-
-##AIC
-
-```{r}
-AIC(model_country, model_geom, model_full)
-```
-
-According to this the model_country is better!
-
-#### viauslise within country geomoprhology effects
-
-```{r}
-ggplot(biomass_per_site,
-       aes(geomorphology, mean_biomass)) +
-  geom_boxplot() +
-  facet_wrap(~ country, scales = "free_x")
-```
-
-```{r}
-lmer(mean_biomass ~ geomorphology + (1 | country), data = biomass_per_site)
-```
-
 #### Biomass vs Chlorophyll-a
+
+```{r}
+
+# Overview of the data
+head(chla_2009_sites,3) # see first three rows
+str(chla_2009_sites) #structure of data
+summary(chla_2009_sites) #summary of data
+```
+Outputs:
+- 30 sites
+- right-skewed distribution:
+  mean>median and upper tail extends to 3.24 (which is then ~4x median)
+
+This suggetss that chlorophyll-a follows a log-normal or gamma-like distribution
+
+Visualise:
+```{r}
+library(ggplot2)
+
+ggplot(chla_2009_sites, aes(x = mean_annual_chla)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Mean annual chlorophyll-a (mg m"^{-3}*")"),
+    y = "Number of sites"
+  ) +
+  theme_bw()
+
+```
+Looks like log-noraml distibuton maybe gamma
+
+To do for chlor-a:
+plot these...
+plot the spaital scale 
+test fir spatial autocorrekation
+
+
+##### See auto-correlation
+...
 
 ##### Plot
 
 ```{r}
 #| label: biomass-vs-chla-plot
 
-# Graph the data - X-Y scatterplot
+# Graph the data - X-Y scatter plot
 biomass_chla_fig1 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
   ggplot(aes(x=mean_annual_chla, y=log(mean_biomass))) + 
   geom_point() +
@@ -254,16 +182,10 @@ biomass_chla_fig1 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site
 
 biomass_chla_fig1
 
-biomass_chla_fig2 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
-ggplot(aes(mean_annual_chla, log(mean_biomass), colour = country)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = lm, se = FALSE)
-biomass_chla_fig2
-
 
 ```
 
-##### Model
+##### Simple linear regression
 
 ```{r}
 #| label: biomass-vs-chla-lm
@@ -272,11 +194,85 @@ biomass_chla_fig2
 chla_x_and_y_site <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE)
 
 # Build lm 
-lm_biomass_chla <- lm(log(mean_biomass)~mean_annual_chla,data = chla_x_and_y_site) 
+lm_biomass_chla <- lm(mean_biomass~mean_annual_chla,data = chla_x_and_y_site) 
+```
+Analyse model:
 
+```{r}
 # Analyse the model 
+coef(lm_biomass_chla)
+#residuals(lm_biomass_chla)
 summary(lm_biomass_chla) 
-arm::display(lm_biomass_chla) #load function
+# or arm::display(lm_biomass_chla)
+
+confint(lm_biomass_chla) 
+
+```
+Doesn't include 0 so chlr a seems to have an effect on fish bioamss
+But... 
+
+model assumptiosna dn vioaltions:
+```{r}
+par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+plot( lm_biomass_chla, which= c(1:2))
+```
+Really not very good...
+The residuals see, to be going down 
+and the vairacne increasses with mean...
+
+##### Log transformation
+```{r}
+# lm with log transformation
+lm_biomass_chla_log <- lm(log(mean_biomass)~mean_annual_chla, data = chla_x_and_y_site) 
+
+# plot model
+(lm_biomass_chla_log_plot <- qplot(mean_annual_chla, log(mean_biomass), data= chla_x_and_y_site, geom= c("point", "smooth"), method= "lm", formula= y~x, main= "Linear regression, log data") +
+    theme_bw())
+
+```
+```{r}
+par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+plot( lm_biomass_chla_log, which= c(1:2))
+```
+Residuals are definitely better but they still follow a strange down shape...
+
+### Lme
+
+model 1: locations
+```{r}
+lmer_model_1 <- lmer(mean_biomass ~ mean_annual_chla +
+    (1 | location), data = chla_x_and_y_site)
+
+summary(lmer_model_1) 
+```
+- Too few locations or very unbalanced data
+- Little between-location variation in mean biomass after aggregation
+- Biomass already averaged at the location level → no replication left
+- Location effect is absorbed by chl-a (collinearity)
+
+```{r}
+
+```
+
+
+model 2: geomorphologies
+```{r}
+lmer_model_2 <- lmer(mean_biomass ~ mean_annual_chla +
+    (1 | geomorphology), data = chla_x_and_y_site)
+summary(lmer_model_2) 
+```
+
+model 3: country 
+```{r}
+lmer_model_3 <- lmer(mean_biomass ~ mean_annual_chla +
+    (1 | country), data = chla_x_and_y_site)
+summary(lmer_model_3)
+```
+comparison:
+
+
+### 
+
 
 library(lme4)
 
@@ -286,9 +282,6 @@ model_chla <- lmer(
 )
 
 summary(model_chla)
-
-
-```
 
 #### Biomass vs SST
 
@@ -326,6 +319,13 @@ biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site",
 
 biomass_sst_fig2
 ```
+
+```{r}
+par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+plot( lm_biomass_chla, which= c(1:2))
+```
+
+
 
 ##### Model
 

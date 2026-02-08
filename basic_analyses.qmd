@@ -155,6 +155,63 @@ If you compare with location, geomorphology explians far less variation - so not
 
 # Spatial auto-correlation checks
 
+## Preparing data
+```{r}
+# Add lat/lon data for stations
+biomass_location_data <- location_2009 %>%
+  select(station, site, latitude, longitude)
+
+fish_2009 <- fish_data_2009 %>%
+  left_join(biomass_location_data, by = "station")
+
+# Create site lat/lon as mean of station lat/lon
+biomass_location_data <- fish_2009 %>%
+  group_by(site.x) %>%
+  mutate(
+    site_lon = mean(longitude, na.rm = TRUE),
+    site_lat = mean(latitude,  na.rm = TRUE),
+    biomass = mean(tot_wt_g, na.rm = TRUE),
+  ) %>%
+  ungroup()
+```
+
+
+## Plot 
+```{r}
+
+library(sf)
+library(ggplot2)
+library(rnaturalearth)
+
+# World map
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+plot <- ggplot() +
+  geom_sf(data = world, fill = "grey95", colour = "grey70") +
+  geom_point(
+    data = biomass_location_data,
+    aes(x = site_lon, y = site_lat, colour = biomass),
+    size = 1.5
+  ) +
+  scale_colour_gradient(
+    low = "#56B1F7",
+    high = "red3",
+    na.value = "grey78",
+    name = "Biomass"
+  ) +
+  coord_sf(
+    xlim = c(38.5, 45),
+    ylim = c(-14, -1),
+    expand = FALSE
+  ) +
+  theme_classic()
+
+plot
+
+```
+
+
+
 ## stations
 
 ```{r}

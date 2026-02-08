@@ -138,14 +138,13 @@ head(chla_2009_sites,3) # see first three rows
 str(chla_2009_sites) #structure of data
 summary(chla_2009_sites) #summary of data
 ```
-Outputs:
-- 30 sites
-- right-skewed distribution:
-  mean>median and upper tail extends to 3.24 (which is then ~4x median)
+
+Outputs: - 30 sites - right-skewed distribution: mean\>median and upper tail extends to 3.24 (which is then \~4x median)
 
 This suggetss that chlorophyll-a follows a log-normal or gamma-like distribution
 
 Visualise:
+
 ```{r}
 library(ggplot2)
 
@@ -158,15 +157,13 @@ ggplot(chla_2009_sites, aes(x = mean_annual_chla)) +
   theme_bw()
 
 ```
+
 Looks like log-noraml distibuton maybe gamma
 
-To do for chlor-a:
-plot these...
-plot the spaital scale 
-test fir spatial autocorrekation
-
+To do for chlor-a: plot these... plot the spaital scale test fir spatial autocorrekation
 
 ##### See auto-correlation
+
 ...
 
 ##### Plot
@@ -196,6 +193,7 @@ chla_x_and_y_site <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site
 # Build lm 
 lm_biomass_chla <- lm(mean_biomass~mean_annual_chla,data = chla_x_and_y_site) 
 ```
+
 Analyse model:
 
 ```{r}
@@ -208,19 +206,20 @@ summary(lm_biomass_chla)
 confint(lm_biomass_chla) 
 
 ```
-Doesn't include 0 so chlr a seems to have an effect on fish bioamss
-But... 
+
+Doesn't include 0 so chlr a seems to have an effect on fish bioamss But...
 
 model assumptiosna dn vioaltions:
+
 ```{r}
 par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
 plot( lm_biomass_chla, which= c(1:2))
 ```
-Really not very good...
-The residuals see, to be going down 
-and the vairacne increasses with mean...
+
+Really not very good... The residuals see, to be going down and the vairacne increasses with mean...
 
 ##### Log transformation
+
 ```{r}
 # lm with log transformation
 lm_biomass_chla_log <- lm(log(mean_biomass)~mean_annual_chla, data = chla_x_and_y_site) 
@@ -230,56 +229,57 @@ lm_biomass_chla_log <- lm(log(mean_biomass)~mean_annual_chla, data = chla_x_and_
     theme_bw())
 
 ```
+
 ```{r}
 par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
 plot( lm_biomass_chla_log, which= c(1:2))
 ```
+
 Residuals are definitely better but they still follow a strange down shape...
 
 ### Lme
 
 model 1: locations
+
 ```{r}
 lmer_model_1 <- lmer(mean_biomass ~ mean_annual_chla +
     (1 | location), data = chla_x_and_y_site)
 
 summary(lmer_model_1) 
 ```
-- Too few locations or very unbalanced data
-- Little between-location variation in mean biomass after aggregation
-- Biomass already averaged at the location level → no replication left
-- Location effect is absorbed by chl-a (collinearity)
+
+-   Too few locations or very unbalanced data
+-   Little between-location variation in mean biomass after aggregation
+-   Biomass already averaged at the location level → no replication left
+-   Location effect is absorbed by chl-a (collinearity)
 
 ```{r}
 
 ```
 
-
 model 2: geomorphologies
+
 ```{r}
 lmer_model_2 <- lmer(mean_biomass ~ mean_annual_chla +
     (1 | geomorphology), data = chla_x_and_y_site)
 summary(lmer_model_2) 
 ```
 
-model 3: country 
+model 3: country
+
 ```{r}
 lmer_model_3 <- lmer(mean_biomass ~ mean_annual_chla +
     (1 | country), data = chla_x_and_y_site)
 summary(lmer_model_3)
 ```
-comparison:
 
+comparison:
 
 ### 
 
-
 library(lme4)
 
-model_chla <- lmer(
-  log(mean_biomass) ~ mean_annual_chla + (1 | country),
-  data = merge(biomass_per_site, chla_2009_sites, by = "site")
-)
+model_chla \<- lmer( log(mean_biomass) \~ mean_annual_chla + (1 \| country), data = merge(biomass_per_site, chla_2009_sites, by = "site") )
 
 summary(model_chla)
 
@@ -324,8 +324,6 @@ biomass_sst_fig2
 par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
 plot( lm_biomass_chla, which= c(1:2))
 ```
-
-
 
 ##### Model
 

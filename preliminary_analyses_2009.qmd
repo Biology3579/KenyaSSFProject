@@ -190,7 +190,7 @@ summary(chla_2009_sites) #summary of data
   theme_bw() )
 
 # Boxcox 
-boxcox(lm(mean_annual_chla ~ 1, data = chla_model_data),
+boxcox(lm(mean_annual_chla ~ 1, data = chla_2009_sites),
        lambda = seq(-2, 2, 0.1))
 
 ```
@@ -312,20 +312,20 @@ Note that all three models indicate essentially no relationship between chloroph
 
 ```{r}
 
-# log_biomass_chla
-par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(log_biomass_chla, which= c(1:4))
-
 # biomass_log_chla
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
 plot(biomass_log_chla, which= c(1:4))
+
+# log_biomass_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_chla, which= c(1:4))
 
 # log_biomass_log_chla
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
 plot(log_biomass_log_chla, which= c(1:4))
 ```
 
-The residuals look the best for the log_log model, with the assumptions now satisfied.
+The residuals look the best for the log_log model, with the assumptions now satisfied -> The log-transformed predictor slightly improves linearity.
 
 ### Check AICs
 
@@ -343,12 +343,10 @@ When we compare these models we see that they are essentially identical:
 ΔAICc = 0.00/0.07 → essentially identical. AIC weights ≈ 0.5 / 0.5 → no meaningful support difference. Log-likelihoods almost identical.
 
 Statistically:
-
-The data cannot distinguish between these two models. R²: 0.0012 vs 0.00006
-
+The data cannot distinguish between these two models. R²: 0.0012 vs 0.00006s
 Both slopes non-significant - Both slopes ≈ 0
 
-Residuals look better for log_biomass \~ log_chla- so choose this one as it better satisfies model assumptions.
+"Competing models were indistinguishable based on AICc (ΔAICc < 0.1); however, the log–log specification exhibited improved residual structure and provides a biologically interpretable scaling relationship. We therefore retained the log-transformed predictor."
 
 ## Taking into account eco-region (country)
 

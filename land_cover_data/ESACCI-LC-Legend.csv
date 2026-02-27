@@ -1,0 +1,38 @@
+nb_lab,lcc_own_label,r,g,b,speed(kmh-1)
+0,No data,0,0,0,1.4
+10,cropland_rainfed,255,255,100,1.5
+11,herbaceous_cover,255,255,100,1.5
+12,tree_or_shrub_cover,255,255,0,1.5
+20,cropland_irrigated_or_postflooding,170,240,240,1.5
+30,mosaic_ cropland_more_50_or_natural _vegetation_treeshrub_herbaceous_ cover_less_50,220,240,100,1.5
+40,mosaic_natural_vegetation_treeshrub_herbaceous_cover_more_50_or_cropland_less_50,200,200,100,1.5
+50,tree_cover_broadleaved_evergreen_closed_to_open_more_15,0,100,0,1.5
+60,tree_cover_broadleaved_deciduous_closed_to_open_more_15,0,160,0,1.5
+61,tree_cover_broadleaved_deciduous_closed_more_40,0,160,0,1
+62,tree_cover_broadleaved_deciduous_open_15_to_40,170,200,0,1.25
+70,tree_cover_needleleaved_evergreen_close_to_open_more_15,0,60,0,1.5
+71,tree_cover_needleleaved_evergreen_closed_more_40,0,60,0,1.5
+72,tree_cover_needleleaved_evergreen_open_15_to_40,0,80,0,1.5
+80,tree_cover_needleleaved_deciduous_close_to_open_more_15,40,80,0,1.5
+81,tree_cover_needleleaved_deciduous_closed_more_40,40,80,0,1.5
+82,tree_cover_needleleaved_deciduous_open_15_to_40,40,100,0,1.5
+90, tree_cover_mixed_leaf_type_broadleaved_and_needleleaved,120,130,0,1.5
+100,mosaic_tree_and_shrub_more_50_or_herbaceous_less_more_50,140,160,0,1.25
+110,mosaic_tree_and_shrub_less_50_or_herbaceous_cover_more_50,190,150,0,1.5
+120,shrubland,150,100,0,1.5
+121,shrubland_evergreen,120,75,0,1.5
+122,shrubland_deciduous,150,100,0,1.5
+130,grassland,255,180,50,1.5
+140,lichens_and_mosses,255,220,210,1.5
+150,sparse_vegetation_tree_shrub_herbaceous-cover_less_15,255,235,175,2.5
+152,sparse_shrub_less_15,255,210,220,2.5
+153,sparse_herbaceous_cover_less_15,255,235,175,2.5
+160,tree_cover_flooded_fresh_or_brackish_water,0,120,90,1
+170,tree_cover_flooded_saline_water,0,150,120,1
+180,shrub_or_herbaceous_cover_flooded_fresh_saline_brackish_water,0,220,130,1
+190,urban_areas,195,20,0,30
+200,bare_areas,255,245,215,
+201,consolidated_bare_areas,220,220,220,
+202,unconsolidated_bare_areas,255,245,215,
+210,water_bodies,0,70,200,20
+220,permanent_snow_and_ice,255,255,255,

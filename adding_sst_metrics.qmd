@@ -1,0 +1,188 @@
+---
+title: "adding_sst"
+format: html
+editor: visual
+---
+
+# Overview
+
+This document processes NASA Ocean Color Level-3 binned (L3b) chlorophyll-a data.. and sea-surface temperature data (SST) for the Western Indian Ocean (WIO) region. The script:
+
+-   Reads HDF5/NetCDF files containing binned satellite ocean color data
+-   Converts NASA bin numbers to geographic coordinates (lat/lon)
+-   Filters data to the WIO Area of Interest (37°E - 47°E, 15°S - 1°N)
+-   Exports combined data to CSV and Parquet formats
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README to ensure proper setup and usage.*
+
+## Load required libraries
+
+```{r}
+#| label: load-packages
+#| echo: false
+#| include: false
+
+# Load required libraries
+library(here)
+library(ncdf4)
+library(data.table)
+library(arrow)
+library(sf)
+library(tidyverse) 
+library(dplyr)      
+library(readr)
+
+source(here::here("functions", "extracting.R"))
+```
+
+```{r}
+
+example_dhw <- extract_sat_data(filepath =here::here("raw_data", "dhw_raw_2009", "ct5km_dhw_v3.1_20080101.nc"), metric_name = "degree_heating_week", filter = TRUE)
+
+example_dhw <- example_dhw %>% filter(!is.na(degree_heating_week))
+```
+
+```{r}
+# Load location data and add columns to add relevant chlor-a data
+locations_2009 <- read_rds(
+  here::here("processed_data", "clean_location_2009.rds")) %>% 
+  dplyr::select(date, station, site, country, latitude, longitude) %>% 
+  dplyr::mutate(closest_cell_lat =0, closest_cell_lon=0, cell_distance_km = 0)
+
+locations_with_dhw_sat_2009 <- assign_nearest_cell(example_dhw, locations_2009) %>% 
+  dplyr::mutate(dhw_sum = 0)
+```
+
+```{r}
+nc <- nc_open(here::here("raw_data", "dhw_raw_2009", "ct5km_dhw_v3.1_20080101.nc"))
+```
+
+```{r}
+# Extract coordinates for the selected indices
+lons <- ncvar_get(nc, "lon")
+lats <- ncvar_get(nc, "lat")
+length(lons)
+
+
+i <- match(locations_with_dhw_sat_2009$closest_cell_lat, lats)
+j <- match(locations_with_dhw_sat_2009$closest_cell_lon, lons)
+keep_idxs <- cbind(col = j, row = i)
+keep_idxs <- unique(keep_idxs)
+
+lons[keep_idxs[1,1]] #  lon is index 2
+lats[keep_idxs[1,2]] # lat is index 1
+
+
+```
+
+```{r}
+#Testing keep_idxs is correct
+
+test_lon_idx = which(lons < 43.3 & lons > 43.2)
+test_lon_idx
+test_lat_idx = which(lats <= -11.6 & lats >= -11.7)
+test_lat_idx
+lats
+
+#43.275 #4466
+#-11.6 #2034
+#
+m <- ncvar_get(nc, "degree_heating_week")
+m[4466,2034]
+
+lons[4466 ]
+lats[2034]
+```
+
+```{r}
+# Define path to all the raw chla files 
+dhw_filenames_2009 <- list.files(
+  here::here("raw_data", "dhw_raw_2009"),
+  full.names = TRUE)
+
+dhw_filenames_2009 <- dhw_filenames_2009
+
+dhw_2009 <- 
+lapply(dhw_filenames_2009, function(f) {
+  extract_sat_data(filepath =  f, metric_name = "degree_heating_week", filter = TRUE, keep_idxs = keep_idxs)
+})
+
+# Combine into a single data table
+raw_dhw_2009 <- data.table::rbindlist(dhw_2009, use.names = TRUE, fill = TRUE)
+
+message(sprintf("Processing complete. Total rows extracted: %d", nrow(raw_dhw_2009)))
+
+
+```
+
+```{r}
+readr::write_rds(raw_dhw_2009,here::here("raw_data","raw_dhw_2009.rds"))
+```
+
+```{r}
+raw_dhw_2009 <- readr::read_rds(here::here("raw_data","raw_dhw_2009.rds"))
+
+```
+
+```{r}
+
+for (i in 1:length(locations_with_dhw_sat_2009$site)){
+  end_date <- locations_with_dhw_sat_2009$date[i]
+  start_date <- end_date - days(364)
+  
+  closest_cell_lat = locations_with_dhw_sat_2009$closest_cell_lat[i]
+  closest_cell_lon = locations_with_dhw_sat_2009$closest_cell_lon[i]
+  
+  
+  relevant_cells <- raw_dhw_2009 %>%
+      filter(
+        lat == closest_cell_lat,
+        lon == closest_cell_lon,
+        date >= start_date,
+        date <= end_date
+      ) 
+  
+  sum <- sum(relevant_cells$degree_heating_week)
+  
+  locations_with_dhw_sat_2009$dhw_sum[i] = sum
+}
+```
+
+```{r}
+readr::write_rds(locations_with_dhw_sat_2009,here::here("processed_data","locations_with_dhw_2009"))
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# World map
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+plot <- ggplot() +
+  geom_sf(data = world, fill = "grey95", colour = "grey70") +
+  geom_point(
+    data = example_dhw,
+    aes(x = lon, y = lat, colour = degree_heating_week),
+    size = 1.5
+  ) +
+  scale_colour_gradient(
+    low = "#56B1F7",
+    high = "red3",
+    na.value = "grey78",
+    name = "Biomass"
+  ) +
+  coord_sf(
+    xlim = c(37, 55),
+    ylim = c(-19, 1),
+    expand = FALSE
+  ) +
+  theme_classic() +   theme(aspect.ratio = 1)   #wider map
+
+plot
+```

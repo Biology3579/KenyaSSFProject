@@ -40,7 +40,7 @@ crs(land_cover) <- "EPSG:4326"
 
 # Define area of interest (AOI)
 #aoi <- ext(37, 47, 1, -15) # actual coordinates 
-aoi <- ext(30, 50, -20,0) #slightly bigger area
+aoi <- ext(30, 55, -21,1) #slightly bigger area
 
 # Crop the land cover raster to AOI
 land_cover_crop <- crop(land_cover, aoi)
@@ -63,20 +63,13 @@ land_cover_behr <- project(
 ```
 
 ## Get roads
-```{r}
-# Set bounding box for roads shapefile
-bounding_box <- st_bbox(c(
-  xmin = 30,  # lon_min
-  ymin = -20,  # lat_min
-  xmax = 50,  # lon_max
-  ymax = 0    # lat_max
-), crs = 4326)
 
+```{r}
 # Load world roads shapefile
 roads <- st_read(here::here("road_data", "trans-road-l.shp"))
 
 # Crop roads shapefile to region of interest
-roads <- st_crop(st_transform(roads, 4326), bounding_box)
+roads <- st_crop(st_transform(roads, 4326), aoi)
 
 # transform to behrmann form
 roads <- st_transform(roads, behrmann)
@@ -172,6 +165,11 @@ transition_graph <- transition(
 # apply geographic correction so diagonal distances are √2 × cellsize (pythagoras)
 transition_graph <- geoCorrection(transition_graph, type = "c")
 
+# save to file
+saveRDS(transition_graph, file = here::here("land_cover_data", "transition_graph.rds"))
+
+# load from file
+transition_graph <- readRDS(here::here("land_cover_data", "transition_graph.rds"))
 ```
 
 ```{r}
@@ -270,14 +268,12 @@ points(xy_b[1], xy_b[2], col = "blue", pch = 16)
 
 ```
 
-
-
 ```{r}
 #load world city data
 world_cities <- read.csv(here::here("city_data", "world_cities.csv"))
 
 #Remove cities that are too small
-cities_to_remove <- c("Mkokotoni","Mtwara", "Koani", "Lindi", "Pemba")
+cities_to_remove <- c("Mkokotoni","Mtwara", "Koani", "Lindi", "Pemba", "Antsiranana", "Mocambique", "Mamoutzou", "Mahajanga")
 world_cities <- world_cities[!world_cities$CITY_NAME %in% cities_to_remove, ]
 
 # function to convert xy coords to lat/lon
@@ -388,8 +384,8 @@ defined as provincial capital cities, major population centres, landmark cities,
 locations_with_grav <- readr::read_rds(here::here("city_data", "locations_sf.rds"))
 
 # Manually set 2010 pops
-cities = c("Zanzibar","Tanga","Dar es Salaam","Mombasa","Kismaayo", "Moroni")
-pops =  c(460000,    260000,  3870000,        940000,    296000,   54000)
+cities = c("Zanzibar","Tanga","Dar es Salaam","Mombasa","Kismaayo", "Moroni", "Nampula", "Toamasina")
+pops =  c(460000,    260000,  3870000,        940000,    296000,   54000    , 539000,   246000)
 
 locations_with_grav$nearest_city_pop <- pops[match(locations_with_grav$nearest_city, cities)]
 
@@ -397,17 +393,25 @@ locations_with_grav$market_grav = locations_with_grav$nearest_city_pop / (locati
 
 ```
 
-# Settlement Gravity 
+# Settlement Gravity
+
 This is getting the sum of the population in a 50km radius
 
 ```{r}
 # Load raster
 landscan <- rast(here::here("city_data", "landscan-global-2010.tif"))
 
+#Test checks:
+#aoi2 <- ext(39.170, 39.358, -6.965, -6.718) #slightly bigger area
+#landscan_crop2 <- crop(landscan, aoi2)
+#message(global(landscan_crop2, fun = "sum", na.rm = TRUE)
+#)
+
 
 # Crop (optional)
 landscan_crop <- crop(landscan, aoi)
 plot(landscan_crop,)
+res(landscan_crop)
 
 
 # Convert points
@@ -435,9 +439,27 @@ pop_sum <- extract(
 locations_with_grav$settlement_tot_pop <- pop_sum$lspop2010
 ```
 
+```{r}
+#TEST
+#Zoom into settlement just to see
+#  	
+# 43.26512
+# -11.670252
+aoi_zoom <- ext(43.18, 43.32, -11.75,-11.6) #slightly bigger area
+
+landscan_zoomed <- crop(landscan, aoi_zoom)
+plot(landscan_zoomed)
+max(landscan_zoomed)
+```
 
 This gets the nearest cell with population density 75
+
 ```{r}
+landscan_crop <- project(landscan_crop, "EPSG:3857")
+
+r_crs <- crs(landscan_crop)
+
+
 # Initialise columns to NA
 locations_with_grav$nearest_pop75_lon <- NA_real_
 locations_with_grav$nearest_pop75_lat <- NA_real_
@@ -448,9 +470,11 @@ threshold <- 75
 start_radius <- 5000    # 5 km
 step_radius  <- 5000    # increase by 5 km
 max_radius   <- 200000
-for (i in 1:length(locations_with_grav$latitude)) {
+for (i in seq_len(nrow(locations_with_grav))) {
 
-  # Point in lon/lat
+  # --------------------------------------------------------------
+  # Create point from lon/lat
+  # --------------------------------------------------------------
   pt_ll <- vect(
     data.frame(
       x = locations_with_grav$longitude[i],
@@ -460,66 +484,97 @@ for (i in 1:length(locations_with_grav$latitude)) {
     crs = "EPSG:4326"
   )
 
-  # Local UTM CRS
-  utm_zone <- floor((locations_with_grav$longitude[i] + 180) / 6) + 1
-  epsg_utm <- ifelse(
-    locations_with_grav$latitude[i] >= 0,
-    32600 + utm_zone,
-    32700 + utm_zone
-  )
+  # Project point to raster CRS (meters)
+  pt_m <- project(pt_ll, r_crs)
 
-  # Project point
-  pt_m <- project(pt_ll, paste0("EPSG:", epsg_utm))
-
-  found <- FALSE
+  found  <- FALSE
   radius <- start_radius
 
+  # --------------------------------------------------------------
+  # Expand search radius until a cell is found
+  # --------------------------------------------------------------
   while (!found && radius <= max_radius) {
 
-    # Buffer
+    # Buffer in meters
     buf <- buffer(pt_m, width = radius)
 
-    # Crop raster locally
-    landscan_m <- project(landscan_crop, crs(pt_m))
-    sub <- crop(landscan_m, buf)
+    # Crop raster to buffer
+    sub <- crop(landscan_crop, buf)
 
-    # Get cells above threshold
-    idx <- which(values(sub) > threshold)
+    if (!is.null(sub)) {
 
-    if (length(idx) > 0) {
+      # Binary mask of cells above threshold
+      m <- sub > threshold
+      # Safe check: are there any TRUE cells?
+      if (!is.null(m) && ncell(m) > 0 && any(m[], na.rm = TRUE)) {
+        #plot(m)
+        # Coordinates of qualifying cells
+        true_cells <- which(values(m))
+        cell_xy <- xyFromCell(m, true_cells)
 
-      # Coordinates of candidate cells
-      cell_xy <- xyFromCell(sub, idx)
+        # Euclidean distances (meters)
+        d <- sqrt(
+          (cell_xy[,1] - crds(pt_m)[1,1])^2 +
+          (cell_xy[,2] - crds(pt_m)[1,2])^2
+        )
 
-      # Distances to point
-      d <- sqrt((cell_xy[,1] - crds(pt_m)[1,1])^2 +
-                (cell_xy[,2] - crds(pt_m)[1,2])^2)
+        # Nearest qualifying cell
+        j <- which.min(d)
 
-      j <- which.min(d)
+        # Create nearest cell point (metric CRS)
+        nearest_pt_m <- vect(
+          data.frame(x = cell_xy[j,1], y = cell_xy[j,2]),
+          geom = c("x", "y"),
+          crs = r_crs
+        )
 
-      # Store result
-      nearest_xy_m <- cell_xy[j, ]
+        # Convert back to lon/lat for storage
+        nearest_pt_ll <- project(nearest_pt_m, "EPSG:4326")
+        coords <- crds(nearest_pt_ll)
 
-      nearest_pt_m <- vect(
-        data.frame(x = nearest_xy_m[1], y = nearest_xy_m[2]),
-        geom = c("x", "y"),
-        crs = crs(pt_m)
-      )
+        # Store results
+        locations_with_grav$nearest_pop75_lon[i]     <- coords[1,1]
+        locations_with_grav$nearest_pop75_lat[i]     <- coords[1,2]
+        locations_with_grav$nearest_pop75_dist_km[i] <- d[j] / 1000
 
-      nearest_pt_ll <- project(nearest_pt_m, "EPSG:4326")
-
-      coords <- crds(nearest_pt_ll)
-
-      locations_with_grav$nearest_pop75_lon[i] <- coords[1,1]
-      locations_with_grav$nearest_pop75_lat[i] <- coords[1,2]
-      locations_with_grav$nearest_pop75_dist_km[i] <- min(d) / 1000
-
-      found <- TRUE
+        found <- TRUE
+      }
     }
+
+    # Explicit cleanup to avoid memory fragmentation
+    rm(sub, m)
+    gc()
 
     radius <- radius + step_radius
   }
 }
+```
+
+```{r}
+#Find population in a 2km radius of the closest 75 pop density cell
+df <- sf::st_drop_geometry(locations_with_grav)
+
+points <- terra::vect(
+  df,
+  geom = c("nearest_pop75_lon", "nearest_pop75_lat"),
+  crs = "EPSG:4326"
+)
+
+points_m   <- project(points, crs(landscan_m))
+
+
+buffers <- buffer(points_m, width = 2000)
+
+# Extract population
+pop_sum <- extract(
+  landscan_m,
+  buffers,
+  fun = sum,
+  na.rm = TRUE
+)
+
+
+locations_with_grav$nearest_settlement_pop <- pop_sum$lspop2010
 
 ```
 
@@ -536,12 +591,12 @@ locations_with_grav$nearest_pop_cost_distance <- mapply(
 #Set a minimum value of 0.005 (as some are 0)
 locations_with_grav$nearest_pop_cost_distance <- pmax(locations_with_grav$nearest_pop_cost_distance, 0.005)
 
-locations_with_grav$nearest_pop75_grav = 75 / (locations_with_grav$nearest_city_cost_distance ** 2)
+locations_with_grav$nearest_pop75_grav = locations_with_grav$nearest_settlement_pop / (locations_with_grav$nearest_pop_cost_distance ^ 2)
 ```
 
 ```{r}
-readr::write_rds(locations_sf,here::here("city_data","locations_with_grav.rds"))
+#Save the final product
+readr::write_rds(locations_with_grav,here::here("city_data","locations_with_grav.rds"))
 ```
 
-#Test metrics against biomass 
-
+#end

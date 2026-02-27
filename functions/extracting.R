@@ -42,17 +42,46 @@ parse_date <- function(filename) {
 extract_sat_data <- function(filepath,
                                  lon_name = "lon",
                                  lat_name = "lat",
-                                 metric_name = "chlor_a") {
+                                 metric_name = "chlor_a",
+                                 filter = FALSE,
+                                 keep_idxs = NA) {
   nc <- nc_open(filepath)
   on.exit(nc_close(nc))
   
   lon  <- ncvar_get(nc, lon_name)
   lat  <- ncvar_get(nc, lat_name)
   metric <- ncvar_get(nc, metric_name)
-  
-  # get indices of non-zero metric values
-  idx <- which(metric != 0, arr.ind = TRUE)
-  
+
+  #Get all indices (we are not removing NAs as we don't want to change the shape)
+  idx <- which(is.na(metric)|!is.na(metric), arr.ind = TRUE)
+  if (filter){
+    if (all(is.na(keep_idxs))){ #If we havent provided filter indices, filter by AOI
+      lon_max = 55
+      lon_min = 37
+      lat_min = -19
+      lat_max = 1
+      
+      # Extract coordinates for the selected indices
+      lons <- lon[idx[, 1]]
+      lats <- lat[idx[, 2]]
+      
+      # Logical mask for bounding box
+      keep <- lons >= lon_min & lons <= lon_max &
+        lats >= lat_min & lats <= lat_max
+      
+
+      # Filter indices
+      idx <- idx[keep, ,drop = FALSE]
+      
+    }
+    else{
+      idx <- keep_idxs
+    }
+    
+  }
+
+
+
   # map indices to coordinates
   dt <- data.table(
     lon = lon[idx[, 1]],  # first column in index → longitude
@@ -66,13 +95,14 @@ extract_sat_data <- function(filepath,
     )
   ]
   setnames(dt, "value", metric_name)
+  message(filepath)
   dt
 }
 
 
 ## A function that assigns to each station, the nearest satellite cell (store lat/lon and distance to cell) ----
 assign_nearest_cell <- function(raw_sat_data, clean_locations){
-  
+
   unique_cells <- raw_sat_data %>% distinct(lat, lon)
   
   # convert to sf (assumes columns as specified)

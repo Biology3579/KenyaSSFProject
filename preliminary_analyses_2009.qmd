@@ -1,0 +1,1417 @@
+---
+title: "perliminary_analyses_2009"
+format: html
+editor: visual
+---
+
+# Overview
+
+This document explores the 2009 dataset. This data ...
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+Load the necessary packages (these can be found in ...)
+
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load require libraries
+library(tidyverse)
+library(sf)
+library(arm)
+library(here)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(ggfortify) # extends ggplot2 for some more ease with stats
+library(MASS) # fits regression models etc.
+library(MuMIn) # multi-model inference (AIC etc.)
+
+```
+
+```{r}
+#| label: renv-restore
+# renv::restore()
+```
+
+## Load data
+
+```{r}
+#| label: load-data
+
+fish_2009 <- readr::read_rds(here::here("processed_data", "clean_fish_2009.rds"))
+location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
+sst_2009 <- read.csv(here::here("processed_data", "locations_with_sst_2009.csv"))
+chla_2009 <- read.csv(here::here("processed_data", "locations_with_chla_2009.csv"))
+gravity_2009 <- readr::read_rds(here::here("city_data", "locations_with_grav.rds"))
+old_grav_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.csv"))
+```
+
+## Total Biomass
+
+This refers to an aggregate of all species.
+
+### Calculate total biomass per station, site, and country
+
+Biomass was quantified at the transect level, with each transect representing a replicate sample within a site. Because transects within a site are spatially proximate and not statistically independent, sites were treated as the independent units in all analyses. Need to explain the stations as well as many metrics are taken using such coordinates!!
+
+Environmental predictors were extracted at station coordinates and then averaged to the site level; stations were grouped into sites if they fell within 2 km of each other. Because environmental rasters are at \~4 km resolution, centroid-based extraction produced effectively identical values in our data (see diagnostic), so either approach is acceptable — we report station-mean values to preserve the sampled footprint.
+
+Total biomass was first calculated for each transect by summing biomass across species, and site-level biomass was then estimated as the mean of its 3–5 constituent transects. This approach ensures equal weighting of transects within sites and avoids pseudo-replication in comparisons among sites.
+
+```{r}
+#| label: calculate-total-data
+
+# Aggregate biomass at transect level
+transect_biomass <- fish_2009 %>%
+  group_by(site, station, ts_no) %>%
+  summarise(
+    transect_biomass = sum(tot_wt_g, na.rm = TRUE),
+    country = first(country),
+    .groups = "drop")
+
+# Mean biomass per site
+biomass_per_site <- transect_biomass %>%
+  group_by(site) %>%
+  summarise(
+    mean_biomass = mean(transect_biomass),
+    country = first(country),
+    .groups = "drop")
+
+# Mean biomass per country
+biomass_per_country <- biomass_per_site %>%
+  group_by(country) %>%
+  summarise(
+    mean_biomass = mean(mean_biomass, na.rm = TRUE))
+
+```
+
+### check number of transects per site\]
+
+There are some that have fewer than 3 - either group or remove. There are also some with more than 5 - check these (maybe split if needs be)
+
+```{r}
+# Number of transects per site
+transect_biomass %>%
+  group_by(site) %>%
+  summarise(n_transects = n())
+
+# Number of transects per station
+transect_biomass %>% 
+    group_by(station) %>%
+  summarise(n_transects = n())
+```
+
+### Biomass
+
+Check the structure of biomass data
+
+```{r}
+# Overview of the data
+head(biomass_per_site,3) # see first three rows
+str(biomass_per_site) #structure of data
+summary(biomass_per_site) #summary of data
+
+# Histogram 
+( biomass_hist <- ggplot(biomass_per_site, aes(x = mean_biomass)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Mean site biomass "),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(mean_biomass ~ 1, data = biomass_per_site),
+       lambda = seq(-2, 2, 0.1))
+```
+
+The biomass seems to follow a moderately right-skewed distribution. Boxcox suggests the data might need to be log transformed.
+
+### Calculate env. variable means
+
+```{r}
+#| label: calculate-env-var-means
+
+# Calculate mean chla per site
+chla_2009_sites <- chla_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    mean_annual_chla = mean(chla_annual_mean))
+
+# # Calculate mean SST per site - when you have the appropriate SST metrics 
+# sst_2009_sites <- sst_2009 %>% 
+#   group_by(site) %>% 
+#   summarise(
+#     mean_annual_sst = mean(sst_annual_mean))
+
+# Calculate mean human gravity per site
+gravity_2009_sites <- gravity_2009 %>%
+  st_drop_geometry() %>%                     # remove geometry before summarise
+  group_by(site) %>%
+  summarise(
+    market_gravity   = mean(market_grav, na.rm = TRUE),
+    settlement_tot_pop = mean(settlement_tot_pop, na.rm = TRUE),
+    nearest_pop_grav = mean(nearest_pop75_grav, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Calculate mean human gravity per site
+old_grav_2009_sites <- old_grav_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    old_gravity = mean(Grav_tot))
+```
+
+# Analysing Biomass vs Chlorophyll-a
+
+## Chlor-a
+
+```{r}
+
+# Overview of the data
+head(chla_2009_sites,3) # see first three rows
+str(chla_2009_sites) #structure of data
+summary(chla_2009_sites) #summary of data
+
+# Histogram 
+( chla_hist <- ggplot(chla_2009_sites, aes(x = mean_annual_chla)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Mean annual chlorophyll-a (mg m"^{-3}*")"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(mean_annual_chla ~ 1, data = chla_model_data),
+       lambda = seq(-2, 2, 0.1))
+
+```
+
+Outputs: - 62 sites - Right-skewed distribution: mean \> median and upper tail extends to 3.24 (which is then \~4x median). - The boxcox suggests log-transformation
+
+## Exploratory Plot
+
+```{r}
+#| label: biomass-vs-chla-plot
+
+# Graph the data - X-Y scatter plot
+biomass_chla_fig1 <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_chla, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_chla_fig1
+
+# Correlation
+with(merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE),
+    cor(mean_annual_chla, mean_biomass))
+
+```
+
+Chlorophyll a and biomass seem to be weakly positively related, with a correlation of 0.16, but the are large confidence intervals, and a lot of uncertainty in the data.
+
+## Simple ls model
+
+```{r}
+#| label: biomass-vs-chla-lm
+
+# Merge needed data
+chla_model_data <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_chla <- lm(mean_biomass~mean_annual_chla,data = chla_model_data) 
+```
+
+Analyse model:
+
+```{r}
+# Analyse the model 
+coef(lm_biomass_chla)
+#residuals(lm_biomass_chla)
+summary(lm_biomass_chla) 
+# or arm::display(lm_biomass_chla)
+
+confint(lm_biomass_chla) 
+
+```
+
+Coefficients for chlorophyll-a: Estimate = 3934; SE = 2075; - p = 0.206 - 95% CI = (-42.6, 497.6)
+
+Interpretation: - The slope is not statistically significant at α = 0.05 - The confidence interval includes zero - Evidence for a linear relationship is weak Correlation: 0.162924 (weakly positive)
+
+Effect size is also small: R² = 0.0265 (i.e, the model only explains 2.65% of the variance in mean biomass) Adjusted R² = 0.0103 - i.e. after accounting for model complexity (1 predictor), the explained variance drops to 1.03%.
+
+### Residual checking of simple ls model
+
+But model assumptions and violations:
+
+```{r}
+par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+plot( lm_biomass_chla, which= c(1:4))
+
+```
+
+Diagnostic plots: - Slight downward trend in residual smooth line - Increasing spread at higher fitted values - Extreme positive outliers (obs 16, 21, 26)
+
+This suggests possible non-linearity (the curve is not flat) and heteroscedasticity (variance increases as fitted values increase) - i.e. residuals are not normally distributed
+
+## Tranformations
+
+```{r}
+
+# Transforming variables
+chla_model_data$log_biomass <- log10(chla_model_data$mean_biomass)
+chla_model_data$log_chla <- log10(chla_model_data$mean_annual_chla)
+
+# Check transformations 
+( log_biomass_hist <- ggplot(chla_model_data, aes(x = log_biomass)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Log-Transformed Biomass"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+( log_chla_hist <- ggplot(chla_model_data, aes(x = log_chla)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Log-Transformed Chlorophyll-a"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+
+The data is now looking much more normal!! Great :)
+
+```{r}
+# Transformed models 
+log_biomass_chla <- lm(log_biomass~mean_annual_chla,data = chla_model_data) 
+biomass_log_chla <- lm(mean_biomass~log_chla,data = chla_model_data) 
+log_biomass_log_chla <- lm(log_biomass~log_chla,data = chla_model_data) 
+
+# Summaries of transformed models
+summary(log_biomass_chla) 
+summary(biomass_log_chla) 
+summary(log_biomass_log_chla) 
+
+# or arm::display(lm_biomass_chla)
+#
+```
+
+Note that all three models indicate essentially no relationship between chlorophyll and biomass.
+
+### Residual checking of transformations
+
+```{r}
+
+# log_biomass_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_chla, which= c(1:4))
+
+# biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(biomass_log_chla, which= c(1:4))
+
+# log_biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_log_chla, which= c(1:4))
+```
+
+The residuals look the best for the log_log model, with the assumptions now satisfied.
+
+### Check AICs
+
+Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_chla or log-log - provides the best fit
+
+```{r}
+library(AICcmodavg)
+
+models <- list(log_biomass_chla, log_biomass_log_chla)
+aictab(models)
+```
+
+When we compare these models we see that they are essentially identical:
+
+ΔAICc = 0.00/0.07 → essentially identical. AIC weights ≈ 0.5 / 0.5 → no meaningful support difference. Log-likelihoods almost identical.
+
+Statistically:
+
+The data cannot distinguish between these two models. R²: 0.0012 vs 0.00006
+
+Both slopes non-significant - Both slopes ≈ 0
+
+Residuals look better for log_biomass \~ log_chla- so choose this one as it better satisfies model assumptions.
+
+## Taking into account eco-region (country)
+
+### Fixed-effects model (separate)
+
+We will first separate this into each different eco-region (country for now)
+
+```{r}
+# plot of biomass vs chlorophyll for a 'no pooling analysis'
+( separate_lm_plot <- ggplot(chla_model_data, aes(x = mean_annual_chla,
+           y = log_biomass)) + geom_point() + geom_smooth(method = "lm", formula = y ~ x) +
+  facet_grid(. ~ country) + theme_bw() + labs( x = "Chlorophyll a",
+    y = "Log-Biomass", title = "No pooling analysis") )
+
+```
+
+Great differences across countries!!
+
+This analysis treats the relationship at each site as unique and independent of the others.
+
+### Combined fixed-effects model
+
+At the other extreme, we could simply pool all the data together in a single simple regression analysis: (same as above).
+
+```{r}
+# Graph the data - X-Y scatter plot
+combined_lm_plot <- chla_model_data %>% 
+  ggplot(aes(x=log_chla, y=log_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+combined_lm_plot
+```
+
+This model helps us to understand the mixed-effects analysis we want to build from these initial simple extremes. Indeed, the mixed-effects analysis is a form of compromise between no-pooling and complete-pooling models. What the mixed-effect model does is to summarise the overall average relationship while quantifying the relationship around the general this general pattern.
+
+There is another fixed-effect model we can fit before moving into the mixed-effects analysis - a normal least squares analysis that includes biomass, country and the interaction.
+
+```{r}
+lm_interaction <- lm( terms(mean_biomass~country+mean_annual_chla+country:mean_annual_chla, keep.order= TRUE), data= chla_model_data )
+
+summary(lm_interaction)
+```
+
+This model allows: - Different intercepts by country - Different slopes by country
+
+### Mixed-effect, random intercepts model
+
+```{r}
+### Linear mixed-effects model analysis using lme function
+# nlme package:
+library(nlme)
+
+# random intercepts model
+random_intercepts_lme_1 <- lme(fixed= mean_biomass~mean_annual_chla, random= ~1|location, na.action= na.exclude, data= chla_model_data) 
+
+summary(random_intercepts_lme_1)
+
+```
+
+There is weak, non-significant evidence that mean annual chlorophyll-a predicts biomass.
+
+There is virtually no detectable location-level variation.
+
+The mixed model structure may not be necessary.
+
+Statistical power is limited.
+
+Some residual outliers warrant checking.
+
+```{r}
+### Linear mixed-effects model analysis using lme function
+# nlme package:
+library(nlme)
+
+# random intercepts model
+random_intercepts_lme_2 <- lme(fixed= mean_biomass~mean_annual_chla, random= ~1|country, na.action= na.exclude, data= chla_model_data) 
+
+summary(random_intercepts_lme_2)
+```
+
+In this model: - Countries differ in baseline biomass (intercepts vary) - The chlorophyll slope is the same across countries
+
+Random effect interpretation: This means: - between-country SD in intercepts ≈ 315 - within-country (site-level) residual SD ≈ 729
+
+Variance components: - Country variance = 314.718² ≈ 99,000 - Residual variance = 728.6395² ≈ 531,000
+
+ICC≈99,000/(99,000+531,000) -\> ICC≈0.16 So: \~16% of biomass variance is attributable to country-level differences.
+
+That is meaningful clustering. This justifies using a mixed model instead of a simple lm.
+
+Note that the AIC is also lower here than for the other one so potentially best to keep this one, givne that locations also have low statistical power (due to few sites per location).
+
+Biomass differs substantially among countries.
+
+Within countries, mean annual chl-a does not explain much variation in biomass.
+
+Country-level ecological, climatic, or management factors likely dominate over chl-a in structuring biomass patterns.
+
+But few groups (only 5) potentially better to have more.
+
+```{r}
+#Individual 
+# detach nlme to avoid conflicts with lme4 package
+detach(package: nlme) 
+     
+library(lme4) # lme4 package (handles crossed random effects)
+
+# Individual site regressions using lmList:
+lmList(mean_biomass~mean_annual_chla|country, data= chla_model_data)
+
+```
+
+The output gives the regression intercept and slope for the regression of biomass as a function of chlorophyll a within each site. We can see substantial variation in both intercepts and slopes (which is something that we should build into the mixed-effects model).
+
+We can then refit the model suing the lmer() package:
+
+```{r}
+
+model_full <- lmer(mean_biomass ~ mean_annual_chla + (1 | country),
+                  data = chla_model_data)
+summary(model_full) 
+
+```
+
+This model (vs other possible ones): - Location random slopes → unidentifiable (not enough sites per location) - Country random slopes → singular. - Location random intercept → variance ≈ 0 (unnecessary).
+
+This model → stable, interpretable, justified by ICC.
+
+### Adding country as a fixed effect
+
+In a simple least squares regression:
+
+```{r}
+chla_lm2 <- lm(mean_biomass ~ mean_annual_chla + factor(country), data = chla_model_data)
+summary(chla_lm2) 
+```
+
+Or the glm equivalent (no tranformations yet) would be:
+
+```{r}
+chla_glm1 <- glm(mean_biomass ~ mean_annual_chla + country, data = chla_model_data, family= gaussian(link="identity") )
+summary(chla_glm1) 
+```
+
+Overall effect of chlorophyll : Estimate = –0.83 SE = 147.55 t = –0.006 ((This is essentially zero) p = 0.996
+
+The 95% CI would be approximately:−0.83±2×147.6≈(−296, 294)
+
+There is absolutely no evidence of a linear association between chl-a and biomass once country is controlled for.
+
+However, for the country effects: Biomass in Kenya is significantly higher than in the reference country by \~1267 units. Kenya Estimate = +1266.7, p = 0.0036 - i.e. kenya differs significantly from baseline
+
+But: - Madagascar: +451 (p = 0.22) → not significant - Mozambique: +361 (p = 0.25) → not significant - Tanzania: +337 (p = 0.32) → not significant
+
+Only Kenya differs significantly from the baseline.
+
+The fixed-country model and the random-country model are telling the same story: - \~15–20% variance attributable to country. - Chl-a has no detectable effect.
+
+One country (Kenya) is driving a strong baseline difference.
+
+With only 5 countries, the fixed-effects model is arguably preferable for inference because: - Random-effects variance estimation is unstable with very few groups. - Fixed effects give explicit country-level contrasts. - You avoid distributional assumptions on country effects.
+
+This suggests: - Any apparent chl-a signal in simpler models was likely confounded by country-level differences. - Once country is controlled properly, the relationship disappears.
+
+### More appropriate GLM
+
+Firstly, we shall inspect the nature of the data. Some key questions: - Are values strictly positive? - Is the distribution right-skewed? - Does variance increase with the mean? - Any zeros?
+
+```{r}
+summary(chla_model_data$mean_biomass)
+hist(chla_model_data$mean_biomass)
+plot(density(chla_model_data$mean_biomass))
+
+```
+
+Gamma family with log link (textbook for ecological biomass): Gamma assumes: Var(Y)∝μ\^2
+
+Which matches what your histogram suggests: - Larger biomass → disproportionately larger spread.
+
+Log link ensures: - Predictions are strictly positive - Effects are multiplicative - Interpretation becomes percent change
+
+```{r}
+chla_gamma <- glm(mean_biomass ~ mean_annual_chla + country,
+                  data = chla_model_data,
+                  family = Gamma(link = "log"))
+
+summary(chla_gamma)
+(AIC_country <- AIC(chla_gamma))
+(AICc_country <- AICc(chla_gamma))
+
+```
+
+Model Form
+
+Because of the log link: log(μ)=Xβ - so effects are multiplicative, not additive (μ=e\^Xβ).
+
+Effect of mean_annual_chla: - Estimate = –0.076 - p = 0.565 (clearly non-significant)
+
+-   Convert to percent change: e\^−0.076−1=−7.3%
+
+Interpretation: For each 1-unit increase in mean annual chl-a, biomass changes by approximately –7%, but this effect is not statistically 95% CI would comfortably include 0% change.
+
+Country effects: - Kenya (estimate = 1.318) -\> e\^1.318≈3.73 (biomass in Kenya is approximately 3.7× higher than in the reference country) - Highly significant (p \< 0.001) -\> This is a very strong effect - Madagascar (estimate = 0.665) -\> e\^0.665≈1.95 (about 95% higher biomass than reference) - Significant (p = 0.045). - Mozambique and Tanzania marginal
+
+Dispersion parameter = 0.417 (this is similar to deviance/df ratio (\~0.32–0.4) below) There is no evidence of problematic overdispersion, so this gamma assumption seems appropriate.
+
+Biomass differed significantly among countries, with Kenya exhibiting approximately 3.7-fold higher biomass relative to the reference country. However, mean annual chlorophyll-a concentration was not a significant predictor of biomass (p = 0.56), indicating no detectable linear association after accounting for geographic variation.
+
+Checking for dispersion (which is one of the model assumptions) - ≈ 1 → dispersion matches model assumption - \> 1 → overdispersion - \< 1 → underdispersion
+
+```{r}
+summary(chla_gamma)$deviance / summary(chla_gamma)$df.residual
+```
+
+This indicates under dispersion relative to the Gamma variance assumption, which is generally less common and less dangerous (where the danger is inflated type I error.
+
+Model comparison:
+
+```{r}
+AIC(chla_glm1, chla_gamma)
+AICc(chla_glm1, chla_gamma)
+
+```
+
+That is a very large improvement. That is decisive evidence that the Gamma(log) model fits substantially better than the Gaussian model. A Gamma GLM with log link provided a substantially better fit than a Gaussian model (ΔAIC = 52.6), indicating a right-skewed error structure. However, mean annual chlorophyll-a did not significantly predict biomass after accounting for country-level differences.
+
+Compare to linear model:
+
+```{r}
+chla_loglm <- lm(log(mean_biomass) ~ mean_annual_chla + country, data = chla_model_data)
+summary(chla_loglm)
+
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(chla_gamma)
+```
+
+Residual patterns: - Slight upward trend in residual spread at higher fitted values. - Mild structure around fitted ≈ 7.4–7.6. - Not dramatic, but variance increases slightly with mean.
+
+The residual pattern looks broadly consistent with that assumption.
+
+```{r}
+par(mfrow=c(2,2))
+plot(chla_loglm)
+```
+
+Residual pattern: (in contrast to glm) - Residuals more evenly scattered. - Flatter LOESS trend. - Slight heteroscedasticity at high fitted values, but mild.
+
+Comparison: Diagnostic Gamma LogLM Winner Residual symmetry Good Slightly better LogLM (small edge) Variance pattern Acceptable Slightly flatter LogLM (small edge) Tail behavior Moderate right tail Similar Tie Theoretical appropriateness Strong Pragmatic Gamma
+
+#### Adding interaction
+
+```{r}
+chla_gamma_interaction <- glm(mean_biomass ~ mean_annual_chla * country,
+                  data = chla_model_data,
+                  family = Gamma(link = "log"))
+
+summary(chla_gamma_interaction)
+(AIC_interaction <- AIC(chla_gamma_interaction))
+(AICc_interaction <- AICc(chla_gamma_interaction))
+```
+
+Note that while AIC is better, the slope estimates are unstable and non-significant. The data is likely insufficient to estimate country-specific slopes robustly. Evidence for heterogeneous chl-a effects is weak.
+
+i.e. Biomass differs among countries; chlorophyll-a shows no consistent effect.
+
+##### Log ratio to compare
+
+```{r}
+anova(chla_gamma, chla_gamma_interaction, test="Chisq")
+
+```
+
+Allowing slopes to differ by country significantly improves model fit. So, biomass differs among countries (intercepts differ). the relationship between chl-a and biomass differs among countries (slopes differ). The association between mean annual chlorophyll-a and biomass varies significantly among countries.
+
+#### Compare with location
+
+```{r}
+chla_gamma2 <- glm(mean_biomass ~ mean_annual_chla + location, data = chla_model_data,
+                  family = Gamma(link = "log"))
+
+summary(chla_gamma2)
+(AIC_location <- AIC(chla_gamma2))
+(AICc_location <- AICc(chla_gamma2))
+```
+
+```{r}
+AIC(chla_gamma, chla_gamma2)
+AICc(chla_gamma, chla_gamma2)
+
+```
+
+## Weighted AICs
+
+```{r}
+AICs <- c(
+  interaction = AIC(chla_gamma_interaction),
+  country     = AIC(chla_gamma),
+  location    = AIC(chla_gamma2)
+)
+
+AICcs <- c(
+  interaction = AICc(chla_gamma_interaction),
+  country     = AICc(chla_gamma),
+  location    = AICc(chla_gamma2)
+)
+
+# do it by hand
+delta <- AICcs - min(AICcs)
+weights <- exp(-0.5 * delta) / sum(exp(-0.5 * delta))
+
+# model_comp <- data.frame(
+#   Model  = names(AICs),
+#   AIC    = AICs,
+#   AICc   = AICcs,
+#   Delta  = delta,
+#   Weight =  round(model_comp$Weight, 4),
+#   row.names = NULL
+# )
+
+model_comp <- data.frame(
+  Model  = names(AICs),
+  AIC    = AICs,
+  AICc   = AICcs,
+  Delta  = delta,
+  Weight1 =  round(Weights(AICs),3),
+  Weight2 =  round(Weights(AICcs),3),
+  row.names = NULL
+)
+
+model_comp[order(model_comp$AIC), ]
+
+# model selection using MuMIN package
+model.sel(chla_gamma_interaction,
+          chla_gamma,
+          chla_gamma2,
+          rank = "AICc")
+
+```
+
+Comparison: You are comparing:
+
+-   Gamma + country (fixed) \[df = 7, AIC = 947.42\]
+-   Gamma + location (fixed) \[df = 34, AIC = 957.55\]
+
+Country model is clearly preferred. Despite location model reducing deviance much more, it is penalized heavily for complexity (34 parameters vs 7). The extra 27 parameters for location do not justify the improved deviance.
+
+This is because, there is potential over-fitting. - 62 observations and \~32 locations (so essentially approx 2 observations per location) So while chlorophyll a seems significant for this model, this is almost certainly a statistical artifact due to overparameterisation and low residual df.
+
+The statistically clean solution (if data allowed) would be a Gamma GLMM with random intercept for location and country as fixed effect, but earlier we saw that location-level variance ≈ 0 (because there are too few observations per location for random slopes) So current data do not strongly support that complexity.
+
+We also check the AICcs since we have a small dataset and we need to account for this by giving a greater penalty ... However the results are similar: - The interaction model still dominates (weight ≈ 0.96). - Country-only model has modest support (4%). - Location model is decisively unsupported.
+
+```{r}
+confint(chla_gamma_interaction)
+
+```
+
+The very wide CIs tell us: - Data are weakly informative about slope magnitudes. - Small perturbations in data could shift slope estimates.
+
+Model selection using AICc strongly supported a Gamma GLM including a chlorophyll-a × country interaction (weight = 0.96). However, profile likelihood confidence intervals for country-specific slopes were wide and included zero, indicating substantial uncertainty in the magnitude and direction of these effects.
+
+### Bayesian inference(?)
+
+```{r}
+model.sel(chla_gamma_interaction,
+          chla_gamma,
+          chla_gamma2,
+          rank = "BIC")
+```
+
+The BICs say the same thing :) - so confidence
+
+# Bayesian model - automatic
+
+```{r}
+library(brms)
+
+fit_bayes <- brm(
+  mean_biomass ~ mean_annual_chla + (mean_annual_chla | country),
+  data = chla_model_data,
+  family = Gamma(link = "log"),
+  prior = c(
+    prior(normal(0,1), class = "b"),
+    prior(exponential(1), class = "sd")
+  ),
+  chains = 4, iter = 4000
+)
+
+```
+
+```{r}
+print(fit_bayes)    # Rhat, n_eff, se_mean for parameters
+summary(fit_bayes)
+
+```
+
+fix bayesian model
+
+```{r}
+fit_bayes2 <- update(
+  fit_bayes,
+  control = list(adapt_delta = 0.99, max_treedepth = 15)
+)
+```
+
+```{r}
+print(fit_bayes2)        # shows Rhat and ESS for all parameters
+summary(fit_bayes2)      # more detail
+
+```
+
+```{r}
+chla_model_data$mean_annual_chla_s <- 
+  as.numeric(scale(chla_model_data$mean_annual_chla))
+
+fit_bayes3 <- brm(
+  mean_biomass ~ mean_annual_chla_s + (1 + mean_annual_chla_s || country),
+  data = chla_model_data,
+  family = Gamma(link = "log"),
+  prior = c(
+    prior(normal(0,1), class = "b"),
+    prior(exponential(1), class = "sd")
+  ),
+  chains = 4, iter = 4000
+)
+
+```
+
+# Biomass vs Human gravity
+
+## Human gravity
+
+```{r}
+
+# Overview of the data
+head(gravity_2009_sites,3) # see first three rows
+str(gravity_2009_sites) #structure of data
+summary(gravity_2009_sites) #summary of data
+
+# Histogram 
+( gravity_hist <- ggplot(gravity_2009_sites, aes(x = mean_gravity)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Mean gravity"),
+    y = "Number of sites"
+  ) +
+  theme_bw() )
+
+```
+
+Outputs: - Extremely right skewed (Median ≈ 51, Mean ≈ 214) → Mean is \~4× the median. - Massive upper-tail outlier(s) - Q3 = 93.5, Max = 4059 (→ The maximum is \~43× Q)
+
+The histogram confirms: - Dense concentration below \~100 - A few extreme values (likely 3–5 observations) stretching into the thousands.
+
+This is a highly right-skewed, heavy-tailed predictor with clear high-leverage potential.
+
+## Exploratory Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatter plot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = gravity_2009_sites, by = "site", all = TRUE) %>%
+  ggplot(aes(x=mean_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_gravity_fig1
+
+# Correlation
+with(merge(x = biomass_per_site, y = gravity_2009_sites, by = "site", all = TRUE),
+    cor(mean_gravity, mean_biomass))
+
+```
+
+Human gravity seems to have a negative effect on biomass, but the are large confidence intervals, and a lot of uncertainty in the data.
+
+## Simple ls model
+
+model 1 - the simplest unstransforemd regression
+
+```{r}
+#| label: biomass-vs-chla-lm
+
+# Merge needed data
+gravity_biomass_data <- merge(x = biomass_per_site, y = gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+base_model <- lm(mean_biomass~mean_gravity,data = gravity_biomass_data) 
+```
+
+Analyse model:
+
+```{r}
+# Analyse the model 
+coef(base_model)
+summary(base_model) 
+confint(base_model) 
+
+```
+
+Coefficient for chlorophyll-a - Estimate = -0.1201 - p = 0.455 - 95% CI = (-0.439, 0.1994)
+
+Interpretation: - The slope is not statistically significant at α = 0.05 - The confidence interval includes zero - Evidence for a linear relationship is weak
+
+Effect size is also small: R2=0.009327 (i.e. only 0.9% of variation in biomass is explained by gravity)
+
+### Residual checking of simple ls model
+
+But model assumptions and violations:
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+# par(mar=c(1,1,1,1))
+plot( base_model, which= c(1:4))
+
+```
+
+## Boxcox checks
+
+```{r}
+boxcox<- boxcox(base_model,
+             lambda = seq(-2, 2, by = 0.001), # Using a small step (0.001) gives a more precise λ estimate
+             plotit = TRUE)
+
+#Lambda estimate
+( lambda <- boxcox$x[which.max(boxcox$y)] )
+
+# 
+loglik_max <- max(boxcox$y)
+ci <- boxcox$x[boxcox$y >= loglik_max - 1.92]
+range(ci)
+
+```
+
+The data appear: - Right-skewed - Variance increasing with mean
+
+A negative λ suggests strong right-skew and possibly heavy tails.
+
+Lambda value (and CIs) suggests that the best transformation is reciprocal square-root is strongly supported. (not necessarily the log)
+
+Transformed model - as suggested by boxcox:
+
+```{r}
+
+# Transforming data according to boxcox
+gravity_biomass_data$biomass_boxcox <-
+  (gravity_biomass_data$mean_biomass^lambda - 1) / lambda
+
+# Build boxcox model
+boxcox_model <- lm(biomass_boxcox ~ mean_gravity,
+               data = gravity_biomass_data)
+
+# Plot
+(boxcox_plot <- ggplot(gravity_biomass_data,
+       aes(x = mean_gravity,
+           y = biomass_boxcox)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(
+    x = expression("Mean human gravity"),
+    y = expression("Box-Cox transformed biomass ("*lambda == -0.537*")")
+  ) +
+  theme_bw() )
+```
+
+```{r}
+# Analyse the model 
+coef(boxcox_model)
+#residuals(lm_biomass_chla)
+summary(boxcox_model) 
+# or arm::display(lm_biomass_chla)
+confint(boxcox_model) 
+```
+
+Outputs:
+
+### Residual checking of transformation
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(boxcox_model, which= c(1:4))
+
+```
+
+Diagnostics:
+
+Residuals vs Fitted: - Very flat (good linearity)
+
+Q–Q - Much improved relative to raw model - Slight tail deviation but acceptable
+
+Scale–Location - Nearly horizontal - Variance fairly stable
+
+Cook’s distance - Some moderate influence (16, 22) - No catastrophic leverage like before
+
+Assumptions are now reasonably satisfied.
+
+### Another option
+
+```{r}
+boxcox_model2 <- lm(biomass_boxcox ~ log(mean_gravity), data= gravity_biomass_data)
+
+
+
+```
+
+```{r}
+# Analyse the model 
+coef(boxcox_model2)
+#residuals(lm_biomass_chla)
+summary(boxcox_model2) 
+# or arm::display(lm_biomass_chla)
+confint(boxcox_model2) 
+```
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(boxcox_model2, which= c(1:4))
+```
+
+Looking better!
+
+```{r}
+AICc(boxcox_model,boxcox_model2)
+```
+
+Seems that log transforming the gravity also improves AIC
+
+## Log tranformations
+
+```{r}
+gravity_biomass_data$log_gravity <- log(gravity_biomass_data$mean_gravity)
+
+log_gravity_m <- lm(mean_biomass ~ log_gravity, data = gravity_biomass_data)
+log_biomass_m <- lm(log(mean_biomass) ~ mean_gravity, data = gravity_biomass_data)
+log_log_m <- lm(log(mean_biomass) ~ log_gravity, data = gravity_biomass_data)
+
+
+AICc(base_model, log_gravity_m)
+AICc(log_biomass_m,log_log_m)
+
+```
+
+Log transformations of gravity not seem to have a huge impact. However, log transforming the biomass does seem to have an impact
+
+```{r}
+# Analyse the model 
+coef(log_biomass_m)
+#residuals(log_biomass_m)
+summary(log_biomass_m) 
+# or arm::display(log_biomass_m)
+confint(log_biomass_m) 
+```
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_m, which= c(1:4))
+```
+
+The boxcox tranformation with the log gravity seems to be giving the best results but not entirely sure about this.
+
+## Adding country as a fixed effect
+
+In a simple least squares regression:
+
+```{r}
+gravity_country_lm <- lm(mean_biomass ~ mean_gravity + factor(country), data = gravity_biomass_data)
+summary(gravity_country_lm)
+```
+
+```{r}
+boxcox2 <- boxcox(gravity_country_lm,
+             lambda = seq(-2, 2, by = 0.001), # Using a small step (0.001) gives a more precise λ estimate
+             plotit = TRUE)
+
+#Lambda estimate
+( lambda2 <- boxcox2$x[which.max(boxcox2$y)] )
+
+# ..
+loglik_max2 <- max(boxcox2$y)
+ci2 <- boxcox2$x[boxcox2$y >= loglik_max2 - 1.92]
+range(ci2)
+```
+
+Including country in the model does not materially change λ. Still strongly favors reciprocal square-root. This is important: λ depends on the full mean structure. The fact that λ ≈ −0.5 persists indicates the variance structure is intrinsic to biomass, not an artifact of omitted covariates.
+
+# Again, boxcox models
+
+```{r}
+
+# Just boxcox transformation
+boxcox_country_m1 <- lm(biomass_boxcox ~ mean_gravity + factor(country),
+               data = gravity_biomass_data)
+summary(boxcox_country_m1)
+
+# Boxcox transformation and log gravity
+boxcox_country_m2 <- lm(biomass_boxcox ~ log_gravity + factor(country),
+               data = gravity_biomass_data)
+summary(boxcox_country_m2)
+
+
+AICc(boxcox_country_m1, boxcox_country_m2)
+```
+
+Here it seems that the log transformation of gravity is better again, but again the impact isn't huge
+
+### Glm equivalents
+
+glm equivalent (no tranformations yet) would be:
+
+```{r}
+gravity_glm1 <- glm(mean_biomass ~ mean_gravity + country, data = gravity_biomass_data, family= gaussian(link="identity") )
+summary(gravity_glm1) 
+```
+
+not great ...
+
+### More appropriate GLM
+
+Firstly, we shall inspect the nature of the data. Some key questions: - Are values strictly positive? - Is the distribution right-skewed? - Does variance increase with the mean? - Any zeros?
+
+```{r}
+summary(gravity_biomass_data$mean_biomass)
+hist(gravity_biomass_data$mean_biomass)
+plot(density(gravity_biomass_data$mean_biomass))
+
+```
+
+# Log transformation
+
+```{r}
+gravity_log_glm <- glm(log(mean_biomass) ~ mean_gravity + country, data = gravity_biomass_data,
+    family = gaussian(link="identity"))
+
+```
+
+```{r}
+gravity_gamma_glm <- glm(mean_biomass ~ mean_gravity + country, data = gravity_biomass_data,
+    family = Gamma(link="log"))
+
+AICc(gravity_log_glm, gravity_gamma_glm)
+
+```
+
+```{r}
+gravity_logg_glm <- glm(log(mean_biomass) ~ log(mean_gravity) + country,
+            family = gaussian,
+            data = gravity_biomass_data)
+
+AICc(gravity_log_glm, gravity_logg_glm)
+
+```
+
+This tells us:
+
+The relationship between gravity and biomass is approximately linear in log space.
+
+Whether gravity is entered raw or logged barely changes fit.
+
+There is no strong curvature.
+
+This suggests the gravity range (after accounting for country) may not require power-law scaling.
+
+```{r}
+gravity_gamma <- glm(mean_biomass ~ mean_annual_chla + country,
+                  data = chla_model_data,
+                  family = Gamma(link = "log"))
+
+summary(gravity_gamma)
+(AIC_country <- AIC(chla_gamma))
+
+```
+
+Model Form
+
+Because of the log link: log(μ)=Xβ - so effects are multiplicative, not additive (μ=e\^Xβ).
+
+Effect of mean_annual_chla: - Estimate = –0.076 - p = 0.565 (clearly non-significant)
+
+-   Convert to percent change: e\^−0.076−1=−7.3%
+
+Interpretation: For each 1-unit increase in mean annual chl-a, biomass changes by approximately –7%, but this effect is not statistically 95% CI would comfortably include 0% change.
+
+Country effects: - Kenya (estimate = 1.318) -\> e\^1.318≈3.73 (biomass in Kenya is approximately 3.7× higher than in the reference country) - Highly significant (p \< 0.001) -\> This is a very strong effect - Madagascar (estimate = 0.665) -\> e\^0.665≈1.95 (about 95% higher biomass than reference) - Significant (p = 0.045). - Mozambique and Tanzania marginal
+
+Dispersion parameter = 0.417 (this is similar to deviance/df ratio (\~0.32–0.4) below) There is no evidence of problematic overdispersion, so this gamma assumption seems appropriate.
+
+Biomass differed significantly among countries, with Kenya exhibiting approximately 3.7-fold higher biomass relative to the reference country. However, mean annual chlorophyll-a concentration was not a significant predictor of biomass (p = 0.56), indicating no detectable linear association after accounting for geographic variation.
+
+Checking for dispersion (which is one of the model assumptions) - ≈ 1 → dispersion matches model assumption - \> 1 → overdispersion - \< 1 → underdispersion
+
+```{r}
+summary(chla_gamma)$deviance / summary(chla_gamma)$df.residual
+```
+
+This indicates under dispersion relative to the Gamma variance assumption, which is generally less common and less dangerous (where the danger is inflated type I error.
+
+Model comparison:
+
+```{r}
+AIC(chla_glm1, chla_gamma)
+
+```
+
+That is a very large improvement. That is decisive evidence that the Gamma(log) model fits substantially better than the Gaussian model. A Gamma GLM with log link provided a substantially better fit than a Gaussian model (ΔAIC = 52.6), indicating a right-skewed error structure. However, mean annual chlorophyll-a did not significantly predict biomass after accounting for country-level differences.
+
+Compare to linear model:
+
+```{r}
+chla_loglm <- lm(log(mean_biomass) ~ mean_annual_chla + country,
+                 data = chla_model_data)
+summary(chla_loglm)
+
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(chla_gamma)
+```
+
+Residual patterns: - Slight upward trend in residual spread at higher fitted values. - Mild structure around fitted ≈ 7.4–7.6. - Not dramatic, but variance increases slightly with mean.
+
+The residual pattern looks broadly consistent with that assumption.
+
+```{r}
+par(mfrow=c(2,2))
+plot(chla_loglm)
+```
+
+Residual pattern: (in contrast to glm) - Residuals more evenly scattered. - Flatter LOESS trend. - Slight heteroscedasticity at high fitted values, but mild.
+
+Comparison: Diagnostic Gamma LogLM Winner Residual symmetry Good Slightly better LogLM (small edge) Variance pattern Acceptable Slightly flatter LogLM (small edge) Tail behavior Moderate right tail Similar Tie Theoretical appropriateness Strong Pragmatic Gamma
+
+#### Adding interaction
+
+```{r}
+chla_gamma_interaction <- glm(mean_biomass ~ mean_annual_chla * country,
+                  data = chla_model_data,
+                  family = Gamma(link = "log"))
+
+summary(chla_gamma_interaction)
+(AIC_interaction <- AIC(chla_gamma_interaction))
+```
+
+Note that while AIC is better, the slope estimates are unstable and non-significant. The data is likely insufficient to estimate country-specific slopes robustly. Evidence for heterogeneous chl-a effects is weak.
+
+i.e. Biomass differs among countries; chlorophyll-a shows no consistent effect.
+
+##### Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig1
+
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_gravity, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_gravity_fig2
+```
+
+## log
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig2
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(mean_biomass~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```
+
+### Log
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(log(mean_biomass)~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```
+
+## Comparing different gravity metrics
+
+# Biomass vs SST
+
+##### Plot
+
+```{r}
+#| label: biomass-vs-sst-plot
+
+# Graph the data - X-Y scatterplot
+biomass_sst_fig1 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_sst, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_sst_fig1
+
+
+biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_annual_sst, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_sst_fig2
+```
+
+##log
+
+```{r}
+#| label: biomass-vs-sst-plot
+
+# Graph the data - X-Y scatterplot
+biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_sst, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_sst_fig2
+```
+
+```{r}
+par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+plot( lm_biomass_chla, which= c(1:2))
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-sst-lm
+
+# Merge needed data
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_sst <- lm(mean_biomass~mean_annual_sst,data = sst_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_sst) 
+```
+
+## Log
+
+```{r}
+
+# Merge needed data
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_sst <- lm(log(mean_biomass)~mean_annual_sst,data = sst_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_sst)
+
+
+library(lme4)
+
+model_sst <- lmer(
+  log(mean_biomass) ~ mean_annual_sst + (1 | country),
+  data = merge(biomass_per_site, sst_2009_sites, by = "site")
+)
+
+summary(model_sst)
+```
+
+## Comparing differnet SST metrics
+
+# Biomass vs Connectivity
+
+## Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig1
+
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_gravity, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_gravity_fig2
+```
+
+## log
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig2
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(mean_biomass~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```
+
+### Log
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(log(mean_biomass)~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```

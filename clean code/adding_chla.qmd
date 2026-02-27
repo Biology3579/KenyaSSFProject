@@ -1,5 +1,5 @@
 ---
-title: "adding_chla_and_sst"
+title: "adding_chla"
 author: "Candela Ferrer Diez"
 date: 2025-12-01
 format: html
@@ -13,7 +13,7 @@ This document processes NASA Ocean Color Level-3 binned (L3b) chlorophyll-a data
 -   Reads HDF5/NetCDF files containing binned satellite ocean color data
 -   Converts NASA bin numbers to geographic coordinates (lat/lon)
 -   Filters data to the WIO Area of Interest (37°E - 47°E, 15°S - 1°N)
--   Exports combined data to CSV and Parquet formats
+-   Exports combined data to CSV and Parquet format
 
 # R Set-up
 

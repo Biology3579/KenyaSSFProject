@@ -92,7 +92,7 @@ biomass_per_country <- biomass_per_site %>%
 
 ```
 
-### check number of transects per site\]
+### check number of transects per site
 
 There are some that have fewer than 3 - either group or remove. There are also some with more than 5 - check these (maybe split if needs be)
 
@@ -100,15 +100,24 @@ There are some that have fewer than 3 - either group or remove. There are also s
 # Number of transects per site
 transect_biomass %>%
   group_by(site) %>%
-  summarise(n_transects = n())
+  summarise(ts_no = n())
 
 # Number of transects per station
 transect_biomass %>% 
     group_by(station) %>%
-  summarise(n_transects = n())
+  summarise(ts_no = n())
 ```
 
-### Biomass
+Then check number of sites per country:
+
+```{r}
+# Number of transects per site
+biomass_per_site %>%
+  group_by(country) %>%
+  summarise(site = n())
+```
+
+Note that both of these show that the design is unbalanced. Maybe I should balance this by ensuring an equal number of transects per site. \### Biomass
 
 Check the structure of biomass data
 
@@ -219,6 +228,8 @@ with(merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE),
 Chlorophyll a and biomass seem to be weakly positively related, with a correlation of 0.16, but the are large confidence intervals, and a lot of uncertainty in the data.
 
 ## Simple ls model
+Note that chlorophyll-a, as a continuous predictors, was mean-centered prior to analysis to improve interpretability of model parameters. 
+Centering ensures that the intercept represents the expected response at the average value of the predictor, rather than at zero, which would be biologically unrealistic.
 
 ```{r}
 #| label: biomass-vs-chla-lm
@@ -226,12 +237,18 @@ Chlorophyll a and biomass seem to be weakly positively related, with a correlati
 # Merge needed data
 chla_model_data <- merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE)
 
+# Centre chla
+chla_model_data$mean_chla_centered <- as.numeric(scale(
+  chla_model_data$mean_annual_chla,
+  center = TRUE,
+  scale = FALSE
+))
+
 # Build lm 
-lm_biomass_chla <- lm(mean_biomass~mean_annual_chla,data = chla_model_data) 
+lm_biomass_chla <- lm(mean_biomass~mean_chla_centered,data = chla_model_data) 
 ```
 
 Analyse model:
-
 ```{r}
 # Analyse the model 
 coef(lm_biomass_chla)
@@ -242,19 +259,26 @@ summary(lm_biomass_chla)
 confint(lm_biomass_chla) 
 
 ```
+Outputs: 
 
-Coefficients for chlorophyll-a: Estimate = 3934; SE = 2075; - p = 0.206 - 95% CI = (-42.6, 497.6)
+1. Intercept: 
+Because chlorophyll was centered, the intercept (21,397) represents the expected biomass at average chlorophyll concentration. The 95% CI (16,982 to 25,811) gives the plausible range for that mean biomass level.
 
-Interpretation: - The slope is not statistically significant at α = 0.05 - The confidence interval includes zero - Evidence for a linear relationship is weak Correlation: 0.162924 (weakly positive)
+2. Slopes
+The slope estimate (3,934) represents the expected increase in biomass for each one-unit increase in chlorophyll above the mean. However, this effect is not statistically significant (p = 0.206), and the confidence interval includes zero (−2,218 to 10,085). This means the data do not provide evidence of a linear relationship between chlorophyll and biomass on the raw scale.
 
-Effect size is also small: R² = 0.0265 (i.e, the model only explains 2.65% of the variance in mean biomass) Adjusted R² = 0.0103 - i.e. after accounting for model complexity (1 predictor), the explained variance drops to 1.03%.
+3. Correlation: 0.162924 (weakly positive)
+
+4. Effect size 
+The model explains very little variation (R² ≈ 0.027), indicating that chlorophyll alone accounts for only about 3% of the variability in biomass. 
+
+Overall, there is no strong support for a simple linear biomass–chlorophyll relationship in this specification.
+
 
 ### Residual checking of simple ls model
-
-But model assumptions and violations:
-
+Checking model assumptions and violations:
 ```{r}
-par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
 plot( lm_biomass_chla, which= c(1:4))
 
 ```
@@ -264,7 +288,9 @@ Diagnostic plots: - Slight downward trend in residual smooth line - Increasing s
 This suggests possible non-linearity (the curve is not flat) and heteroscedasticity (variance increases as fitted values increase) - i.e. residuals are not normally distributed
 
 ## Tranformations
+To improve model fit, we can transform the raw data to better conform to the regression assumptions, thereby amplifying predictive power and increasing the overall quality of the model.
 
+We also check how the distribution of the data changes after each transformation to ensure that everything is working as it should.
 ```{r}
 
 # Transforming variables
@@ -291,11 +317,21 @@ chla_model_data$log_chla <- log10(chla_model_data$mean_annual_chla)
 
 The data is now looking much more normal!! Great :)
 
+We can now fit models with the transformed data. 
+Ensure you are also centering the log_chla!
+
 ```{r}
+
+# Centre logged chla
+chla_model_data$log_chla_centred <- as.numeric(
+  scale(chla_model_data$log_chla, center = TRUE, scale = FALSE)
+)
+
+
 # Transformed models 
-log_biomass_chla <- lm(log_biomass~mean_annual_chla,data = chla_model_data) 
-biomass_log_chla <- lm(mean_biomass~log_chla,data = chla_model_data) 
-log_biomass_log_chla <- lm(log_biomass~log_chla,data = chla_model_data) 
+log_biomass_chla <- lm(log_biomass~mean_chla_centered,data = chla_model_data) 
+biomass_log_chla <- lm(mean_biomass~log_chla_centred,data = chla_model_data) 
+log_biomass_log_chla <- lm(log_biomass~log_chla_centred,data = chla_model_data) 
 
 # Summaries of transformed models
 summary(log_biomass_chla) 
@@ -305,8 +341,22 @@ summary(log_biomass_log_chla)
 # or arm::display(lm_biomass_chla)
 #
 ```
+The pattern is very consistent: none of the simple bivariate models show evidence of a relationship between chlorophyll and biomass.
 
-Note that all three models indicate essentially no relationship between chlorophyll and biomass.
+First model: log_biomass ~ mean_annual_chla
+
+The slope is −0.016 (p = 0.79), with R² ≈ 0.001. This indicates essentially no relationship between raw chlorophyll and log-transformed biomass. Chlorophyll explains virtually none of the variation in log biomass.
+
+Second model: mean_biomass ~ log_chla_centred
+
+The slope is 6,048 (p = 0.34), R² ≈ 0.015. This suggests that a one-unit increase in log10 chlorophyll (i.e., a tenfold increase in chlorophyll) would be associated with an increase of about 6,000 biomass units, but this effect is not statistically supported (the confidence interval spans zero).
+
+Because log_chla is centered, the intercept (21,397) represents mean biomass at average log chlorophyll. That makes the intercept interpretable, but it does not change inference.
+
+Third model:
+log_biomass ~ log_chla_centred (log–log model)
+
+The slope is −0.007 (p = 0.95), R² ≈ 0.00006. This is effectively zero. In scaling terms, the estimated exponent is essentially zero, meaning biomass does not scale with chlorophyll in a simple global power-law relationship.
 
 ### Residual checking of transformations
 
@@ -324,8 +374,8 @@ plot(log_biomass_chla, which= c(1:4))
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
 plot(log_biomass_log_chla, which= c(1:4))
 ```
-
-The residuals look the best for the log_log model, with the assumptions now satisfied -> The log-transformed predictor slightly improves linearity.
+Even though neither model shows a significant slope, the log–log form better satisfies linear model assumptions slightly, as it reduces
+The residuals look the best for the log_log model, with the assumptions now satisfied -\> The log-transformed predictor slightly improves linearity.
 
 ### Check AICs
 
@@ -342,27 +392,28 @@ When we compare these models we see that they are essentially identical:
 
 ΔAICc = 0.00/0.07 → essentially identical. AIC weights ≈ 0.5 / 0.5 → no meaningful support difference. Log-likelihoods almost identical.
 
-Statistically:
-The data cannot distinguish between these two models. R²: 0.0012 vs 0.00006s
-Both slopes non-significant - Both slopes ≈ 0
+Statistically: The data cannot distinguish between these two models. R²: 0.0012 vs 0.00006s 
+Both slopes non-significant (≈ 0)
 
-"Competing models were indistinguishable based on AICc (ΔAICc < 0.1); however, the log–log specification exhibited improved residual structure and provides a biologically interpretable scaling relationship. We therefore retained the log-transformed predictor."
+So, model comparison based on AICc indicated no meaningful difference between the log–linear and log–log formulations (ΔAICc = 0.07), and both models explained negligible variation in biomass (R² ≈ 0).
+
+However, diagnostic plots suggested slightly improved homoscedasticity and linearity under the log–log specification. Given the equivalent statistical support and the expectation of power-law scaling in ecological productivity relationships, the log–log model was retained for subsequent analyses.
+
+< Competing models were indistinguishable based on AICc (ΔAICc \< 0.1); however, the log–log specification exhibited improved residual structure and provides a biologically interpretable scaling relationship. We therefore retained the log-transformed predictor. >
 
 ## Taking into account eco-region (country)
 
 ### Fixed-effects model (separate)
 
 We will first separate this into each different eco-region (country for now)
-
 ```{r}
 # plot of biomass vs chlorophyll for a 'no pooling analysis'
-( separate_lm_plot <- ggplot(chla_model_data, aes(x = mean_annual_chla,
+( separate_lm_plot <- ggplot(chla_model_data, aes(x = log_chla_centred,
            y = log_biomass)) + geom_point() + geom_smooth(method = "lm", formula = y ~ x) +
   facet_grid(. ~ country) + theme_bw() + labs( x = "Chlorophyll a",
     y = "Log-Biomass", title = "No pooling analysis") )
 
 ```
-
 Great differences across countries!!
 
 This analysis treats the relationship at each site as unique and independent of the others.
@@ -370,118 +421,139 @@ This analysis treats the relationship at each site as unique and independent of 
 ### Combined fixed-effects model
 
 At the other extreme, we could simply pool all the data together in a single simple regression analysis: (same as above).
-
 ```{r}
 # Graph the data - X-Y scatter plot
 combined_lm_plot <- chla_model_data %>% 
-  ggplot(aes(x=log_chla, y=log_biomass)) + 
+  ggplot(aes(x=log_chla_centred, y=log_biomass)) + 
   geom_point() +
   geom_smooth(method=lm)
 
 combined_lm_plot
 ```
 
-This model helps us to understand the mixed-effects analysis we want to build from these initial simple extremes. Indeed, the mixed-effects analysis is a form of compromise between no-pooling and complete-pooling models. What the mixed-effect model does is to summarise the overall average relationship while quantifying the relationship around the general this general pattern.
+This model helps us to understand the analysis we want to build from these initial simple extremes.
 
-There is another fixed-effect model we can fit before moving into the mixed-effects analysis - a normal least squares analysis that includes biomass, country and the interaction.
+### Country as a fixed effect
+Note: 
+- from above, we will carry on with the log_log model
+- we centre chla. In models including interactions, centering also makes main effects interpretable as effects evaluated at the mean of the interacting variable and can improve numerical stability in mixed-effects models.
+- We used sum-to-zero contrasts (effect coding) for country so that parameter estimates represent deviations from the overall mean rather than differences relative to an arbitrarily chosen reference country. Under effect coding, the intercept corresponds to the grand mean of the response (averaged across all observations), and each country coefficient represents that country’s deviation from this grand mean. In other words, coefficients quantify how much higher or lower a given country’s mean is compared to the overall mean.
 
+#### Additive model
+First we add it in an additive simple least squares regression.
+This additive model assumes that the biomass–chlorophyll slope is the same across all countries, but allows countries to differ in their mean biomass levels:
 ```{r}
-lm_interaction <- lm( terms(mean_biomass~country+mean_annual_chla+country:mean_annual_chla, keep.order= TRUE), data= chla_model_data )
+# Set sum-to-zero contrasts for country (the grand mean is the baseline - not an arbitrary country level)
+contrasts(chla_model_data$country) <- contr.sum(length(levels(chla_model_data$country)))
 
-summary(lm_interaction)
+
+chla_country_additive <- lm(log_biomass ~ log_chla_centred + country, data = chla_model_data)
+summary(chla_country_additive) 
 ```
+Output interpretation: 
 
-This model allows: - Different intercepts by country - Different slopes by country
+1. Intercept
+Because log chlorophyll is centred, the intercept (4.208) represents the grand mean log biomass at average chlorophyll concentration. Under effect coding, each country coefficient represents that country’s deviation from this overall mean (evaluated at mean chlorophyll), not from a specific reference country.
 
-### Mixed-effect, random intercepts model
+2. Slope
+The slope for log chlorophyll is estiamted to be −0.364 (p = 0.019). This indicates that, when a common slope is imposed across countries, biomass declines with increasing chlorophyll on the log–log scale. In scaling terms, this corresponds to a negative exponent: at higher chlorophyll, biomass is lower, on average. 
+However, this interpretation must be treated cautiously because earlier analyses showed evidence of slope heterogeneity across countries. If slopes differ, this “average” negative slope may reflect opposing patterns cancelling out. So beware with this interpretation!
 
-```{r}
-### Linear mixed-effects model analysis using lme function
-# nlme package:
-library(nlme)
+Country1 has significantly lower biomass than the grand mean (−0.418), while country2 has significantly higher biomass (+0.323), both evaluated at mean chlorophyll. Countries 3 and 4 do not differ significantly from the overall mean.
 
-# random intercepts model
-random_intercepts_lme_1 <- lme(fixed= mean_biomass~mean_annual_chla, random= ~1|location, na.action= na.exclude, data= chla_model_data) 
+The model explains about 19% of the variance (R² = 0.19), and the overall model is statistically significant (p = 0.033), indicating that adding country improves fit relative to a simple log–log model without country.
 
-summary(random_intercepts_lme_1)
+In summary, this additive model suggests that biomass differs among countries and shows a negative average biomass–chlorophyll relationship. 
 
-```
+However, given your earlier interaction results, the assumption of a common slope across countries is likely too restrictive, and the interaction model is probably the more appropriate representation of the data.
 
-There is weak, non-significant evidence that mean annual chlorophyll-a predicts biomass.
-
-There is virtually no detectable location-level variation.
-
-The mixed model structure may not be necessary.
-
-Statistical power is limited.
-
-Some residual outliers warrant checking.
-
-```{r}
-### Linear mixed-effects model analysis using lme function
-# nlme package:
-library(nlme)
-
-# random intercepts model
-random_intercepts_lme_2 <- lme(fixed= mean_biomass~mean_annual_chla, random= ~1|country, na.action= na.exclude, data= chla_model_data) 
-
-summary(random_intercepts_lme_2)
-```
-
-In this model: - Countries differ in baseline biomass (intercepts vary) - The chlorophyll slope is the same across countries
-
-Random effect interpretation: This means: - between-country SD in intercepts ≈ 315 - within-country (site-level) residual SD ≈ 729
-
-Variance components: - Country variance = 314.718² ≈ 99,000 - Residual variance = 728.6395² ≈ 531,000
-
-ICC≈99,000/(99,000+531,000) -\> ICC≈0.16 So: \~16% of biomass variance is attributable to country-level differences.
-
-That is meaningful clustering. This justifies using a mixed model instead of a simple lm.
-
-Note that the AIC is also lower here than for the other one so potentially best to keep this one, givne that locations also have low statistical power (due to few sites per location).
-
-Biomass differs substantially among countries.
-
-Within countries, mean annual chl-a does not explain much variation in biomass.
-
-Country-level ecological, climatic, or management factors likely dominate over chl-a in structuring biomass patterns.
-
-But few groups (only 5) potentially better to have more.
-
-```{r}
-#Individual 
-# detach nlme to avoid conflicts with lme4 package
-detach(package: nlme) 
-     
-library(lme4) # lme4 package (handles crossed random effects)
-
-# Individual site regressions using lmList:
-lmList(mean_biomass~mean_annual_chla|country, data= chla_model_data)
-
-```
-
-The output gives the regression intercept and slope for the regression of biomass as a function of chlorophyll a within each site. We can see substantial variation in both intercepts and slopes (which is something that we should build into the mixed-effects model).
-
-We can then refit the model suing the lmer() package:
+#### Interaction model
+This interaction model allows the biomass–chlorophyll slope to differ among countries rather than forcing a common slope.
 
 ```{r}
 
-model_full <- lmer(mean_biomass ~ mean_annual_chla + (1 | country),
-                  data = chla_model_data)
-summary(model_full) 
+# Log-log
+lm_log_interaction <- lm(log_biomass ~ log_chla_centred * country,
+  data = chla_model_data)
+summary(lm_log_interaction)
 
 ```
+Interpration of outputs:
 
-This model (vs other possible ones): - Location random slopes → unidentifiable (not enough sites per location) - Country random slopes → singular. - Location random intercept → variance ≈ 0 (unnecessary).
+1. Intercept
+Because log chlorophyll is centred and effect coding is used, the intercept (4.276) represents the grand mean log biomass at average chlorophyll across all countries. 
 
-This model → stable, interpretable, justified by ICC.
+2. Slopes
+The main effect of log chlorophyll (0.058, p = 0.81) represents the average slope across countries, but in the presence of an interaction this average is not biologically meaningful on its own. 
+The country main effects now represent deviations from the grand mean biomass at mean chlorophyll, conditional on the interaction being included.
 
-### Adding country as a fixed effect
+3. Interaction coefficients
+These are the key terms of the model. 
+These quantify how each country’s slope differs from the overall (grand) slope. Most interaction terms are not statistically different from zero, but the interaction for country4 is strongly negative (−0.899, p = 0.004), indicating that the biomass–chlorophyll scaling relationship in that country differs substantially from the overall trend. Country3 also shows a positive deviation from the mean slope (0.757), with marginal evidence (p = 0.078).
+
+Importantly, the overall model fit improves considerably relative to the additive model. The R² increases from 0.19 to 0.36, and the overall F-test is highly significant (p = 0.003). This indicates that allowing slopes to vary by country explains substantially more variation in biomass.
+
+In substantive terms, there is no single universal biomass–chlorophyll scaling relationship across the region. Instead, the strength and direction of the relationship depend on country, with at least one country exhibiting a markedly different (negative) scaling exponent. This supports the conclusion that the biomass–productivity relationship is spatially heterogeneous rather than globally consistent.
+
+
+#### test wehtehr transforming still improves (stepwise model selection)
+
+#### Test whether interaction improves fit
+Versus non-country:
+```{r}
+#AIC
+interaction_test_models <- list(log_biomass_log_chla, lm_log_interaction)
+aictab(interaction_test_models) 
+
+# Classical F-test
+anova(log_biomass_log_chla, lm_log_interaction)
+
+```
+Interpretation of AIC:
+- ΔAICc = 6.88 → strong support for the interaction model.
+- AIC weight = 0.97 → 97% of the model support is for the interaction model.
+- The interaction model is overwhelmingly preferred.
+- This is substantial evidence that:
+- Slopes differ among countries.
+
+The ANOVA test also confirms that the interaction improves fit under classical F-testing.
+
+
+Versus additive country:
+```{r}
+lm_log_add <- lm(log_biomass ~ log_chla + country,
+                 data = chla_model_data)
+
+#AIC
+interaction_test_models2 <- list(lm_log_add, lm_log_interaction)
+aictab(interaction_test_models) 
+
+anova(lm_log_add, lm_log_interaction)
+```
+The relationship between biomass and chlorophyll differed among countries (log–log interaction: F₄,₅₂ = 3.47, p = 0.014; ΔAICc = 6.88). Estimated scaling exponents ranged from negative to strongly positive across countries.
+
+### Try country as a random effect 
+Because of the uneven sample sizes - consider a ... that treats country-specific slopes as random deviations rather than fixed parameters.
+
+```{r}
+
+lmer(log_biomass ~ log_chla + (log_chla || country),
+     data = chla_model_data)
+```
+but ...
+
+With only 5 countries, the fixed-effects model is arguably preferable for inference because: - Random-effects variance estimation is unstable with very few groups. - Fixed effects give explicit country-level contrasts. - You avoid distributional assumptions on country effects.
+
 
 In a simple least squares regression:
 
 ```{r}
-chla_lm2 <- lm(mean_biomass ~ mean_annual_chla + factor(country), data = chla_model_data)
+
+# Set sum-to-zero contrasts for country (the grand mean is the baseline - not an arbitrary country level)
+contrasts(chla_model_data$country) <- contr.sum(length(levels(chla_model_data$country)))
+
+
+chla_lm2 <- lm(mean_biomass ~ mean_annual_chla + country, data = chla_model_data)
 summary(chla_lm2) 
 ```
 
@@ -601,6 +673,8 @@ Residual pattern: (in contrast to glm) - Residuals more evenly scattered. - Flat
 Comparison: Diagnostic Gamma LogLM Winner Residual symmetry Good Slightly better LogLM (small edge) Variance pattern Acceptable Slightly flatter LogLM (small edge) Tail behavior Moderate right tail Similar Tie Theoretical appropriateness Strong Pragmatic Gamma
 
 #### Adding interaction
+
+Statistically, you would be testing whether slopes vary among countries. I.e. if you have reason to believe that the chlorophyll–biomass relationship differs by country
 
 ```{r}
 chla_gamma_interaction <- glm(mean_biomass ~ mean_annual_chla * country,

@@ -1,12 +1,12 @@
 ---
-title: "perliminary_analyses_2009"
+title: "perlim_analyses_2009"
 format: html
 editor: visual
 ---
 
 # Overview
 
-This document explores the 2009 dataset. This data ...
+This document explores the relationship between chlorophyll a and fish biomass.
 
 # R Set-up
 
@@ -1135,7 +1135,6 @@ range(ci2)
 Including country in the model does not materially change λ. Still strongly favors reciprocal square-root. This is important: λ depends on the full mean structure. The fact that λ ≈ −0.5 persists indicates the variance structure is intrinsic to biomass, not an artifact of omitted covariates.
 
 
-# Biomass vs Human gravity
 
 ## Market gravity
 
@@ -1642,21 +1641,25 @@ anova(log_biomass_log_mg,log_biomass_log_st)
 ```
 Settlement seems to fit better than Market grav!! 
 
-## Settlement gravity (neasrest pop grav)
+## Settlement gravity (nearest pop grav)
 
 ```{r}
 
+#Change format of settlement pop gravity
+gravity_metrics_2009$nearest_pop_grav <-  format(gravity_metrics_2009$nearest_pop_grav, scientific = FALSE)
+gravity_metrics_2009$nearest_pop_grav <-  as.numeric(gravity_metrics_2009$nearest_pop_grav)
+
 # Histogram market gravity 
-( gravity_hist <- ggplot(gravity_metrics_2009, aes(x = settlement_tot_pop)) +
-  geom_histogram(bins = 10) +
+( nearest_pop_hist <- ggplot(gravity_metrics_2009, aes(x = nearest_pop_grav)) +
+  geom_histogram(bins = 20) +
   labs(
-    x = expression("Settlement tot pop"),
+    x = expression("Nearest Pop Grav"),
     y = "Number of sites"
   ) +
   theme_bw() )
 
 # Boxcox 
-boxcox(lm(settlement_tot_pop ~ 1, data = gravity_metrics_2009),
+boxcox(lm(nearest_pop_grav ~ 1, data = gravity_metrics_2009),
        lambda = seq(-2, 2, 0.1))
 
 ```
@@ -1671,16 +1674,16 @@ The Box–Cox analysis confirms that settlement gravity should be log-transforme
 #| label: biomass-vs-gravity-plot
 
 # Graph the data - X-Y scatter plot
-biomass_settle_tot_fig1 <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE) %>%
-  ggplot(aes(x=settlement_tot_pop, y=mean_biomass)) + 
+biomass_nearest_pop_grav_fig1 <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE) %>%
+  ggplot(aes(x=nearest_pop_grav, y=mean_biomass)) + 
   geom_point() +
   geom_smooth(method=lm)
 
-biomass_settle_tot_fig1
+biomass_nearest_pop_grav_fig1
 
 # Correlation
 with(merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE),
-    cor(settlement_tot_pop, mean_biomass))
+    cor(nearest_pop_grav, mean_biomass))
 
 ```
 
@@ -1693,26 +1696,28 @@ model 1 - the simplest untransforemd regression
 ```{r}
 #| label: biomass-vs-chla-lm
 
-# Merge needed data
-gravity_model_data <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE)
+#nesure correct formatting
+#Change format of settlement pop gravity
+gravity_model_data$nearest_pop_grav <-  format(gravity_model_data$nearest_pop_grav, scientific = FALSE)
+gravity_model_data$nearest_pop_grav <-  as.numeric(gravity_model_data$nearest_pop_grav)
 
 # Centre market gravity
-gravity_model_data$settlement_tot_centred <- as.numeric(scale(
-  gravity_model_data$settlement_tot_pop,
+gravity_model_data$nearest_pop_grav_centred <- as.numeric(scale(
+  gravity_model_data$nearest_pop_grav,
   center = TRUE,
   scale = FALSE ))
 
 # Build lm 
-base_model_st <- lm(mean_biomass~settlement_tot_centred,data = gravity_model_data) 
+base_model_sg <- lm(mean_biomass~nearest_pop_grav_centred,data = gravity_model_data) 
 ```
 
 Analyse model:
 
 ```{r}
 # Analyse the model 
-coef(base_model_st)
-summary(base_model_st) 
-confint(base_model_st) 
+coef(base_model_sg)
+summary(base_model_sg) 
+confint(base_model_sg) 
 ```
 ...
 
@@ -1736,11 +1741,11 @@ We also check how the distribution of the data changes after each transformation
 
 # Transforming variables
 gravity_model_data$log_biomass <- log10(gravity_model_data$mean_biomass)
-gravity_model_data$log_settlement_tot <- log10(gravity_model_data$settlement_tot_pop)
+gravity_model_data$log_nearest_pop_grav <- log10(gravity_model_data$nearest_pop_grav)
 
 # Check transformations 
 
-( log_settlement_tot_hist <- ggplot(gravity_model_data, aes(x = log_settlement_tot)) +
+( log_nearest_pop_grav_hist <- ggplot(gravity_model_data, aes(x = log_nearest_pop_grav)) +
   geom_histogram(bins = 20) +
   labs(
     x = expression("Log-Transformed Settlement Tot Pop"),
@@ -1758,19 +1763,19 @@ In most ecological regression contexts, especially with interaction terms, cente
 ```{r}
 
 # Centre logged market gravity
-gravity_model_data$log_settlement_tot_centred <- as.numeric(
-  scale(gravity_model_data$log_settlement_tot, center = TRUE, scale = FALSE)
+gravity_model_data$log_nearest_pop_grav_centred <- as.numeric(
+  scale(gravity_model_data$log_nearest_pop_grav, center = TRUE, scale = FALSE)
 )
 
 # Transformed models 
-log_biomass_st <- lm(log_biomass~settlement_tot_centred,data = gravity_model_data) 
-biomass_log_st<- lm(mean_biomass~log_settlement_tot_centred,data = gravity_model_data) 
-log_biomass_log_st <- lm(log_biomass~log_settlement_tot_centred,data = gravity_model_data) 
+log_biomass_sg <- lm(log_biomass~nearest_pop_grav_centred,data = gravity_model_data) 
+biomass_log_sg <- lm(mean_biomass~log_nearest_pop_grav_centred,data = gravity_model_data) 
+log_biomass_log_sg <- lm(log_biomass~log_nearest_pop_grav_centred,data = gravity_model_data) 
 
 # Summaries of transformed models
-summary(log_biomass_st) 
-summary(biomass_log_st) 
-summary(log_biomass_log_st) 
+summary(log_biomass_sg) 
+summary(biomass_log_sg) 
+summary(log_biomass_log_sg) 
 
 ```
 
@@ -1800,8 +1805,8 @@ plot(log_biomass_log_st, which= c(1:4))
 Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_chla or log-log - provides the best fit
 
 ```{r}
-st_base_models <- list(log_biomass_st, log_biomass_log_st)
-aictab(st_base_models)
+sg_base_models <- list(log_biomass_sg, log_biomass_log_sg)
+aictab(sg_base_models)
 ```
 ...
 
@@ -1811,387 +1816,13 @@ However, diagnostic plots suggested slightly improved homoscedasticity and linea
 
 ### Comparing gravities
 ```{r}
-grav_metric_models2 <- list(log_biomass_log_mg, log_biomass_log_st)
-aictab(grav_metric_models2)
+grav_metric_models_all <- list(log_biomass_log_og, log_biomass_log_mg, log_biomass_log_st, log_biomass_log_sg)
+aictab(grav_metric_models_all)
 
-anova(log_biomass_log_mg,log_biomass_log_st)
+anova(log_biomass_log_og, log_biomass_log_mg, log_biomass_log_st, log_biomass_log_sg)
 ```
-Settlement seems to fit better!! 
+Settlement gravity seems to fit better!! 
 
-# .
-
-
-
-
-
-```{r}
-
-
-# Build boxcox model
-boxcox_model <- lm(biomass_boxcox ~ mean_gravity,
-               data = gravity_biomass_data)
-
-# Plot
-(boxcox_plot <- ggplot(gravity_biomass_data,
-       aes(x = mean_gravity,
-           y = biomass_boxcox)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = expression("Mean human gravity"),
-    y = expression("Box-Cox transformed biomass ("*lambda == -0.537*")")
-  ) +
-  theme_bw() )
-```
-
-```{r}
-# Analyse the model 
-coef(boxcox_model)
-#residuals(lm_biomass_chla)
-summary(boxcox_model) 
-# or arm::display(lm_biomass_chla)
-confint(boxcox_model) 
-```
-
-Outputs:
-
-### Residual checking of transformation
-
-```{r}
-par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(boxcox_model, which= c(1:4))
-
-```
-
-Diagnostics:
-
-Residuals vs Fitted: - Very flat (good linearity)
-
-Q–Q - Much improved relative to raw model - Slight tail deviation but acceptable
-
-Scale–Location - Nearly horizontal - Variance fairly stable
-
-Cook’s distance - Some moderate influence (16, 22) - No catastrophic leverage like before
-
-Assumptions are now reasonably satisfied.
-
-### Another option
-
-```{r}
-boxcox_model2 <- lm(biomass_boxcox ~ log(mean_gravity), data= gravity_biomass_data)
-
-
-
-```
-
-```{r}
-# Analyse the model 
-coef(boxcox_model2)
-#residuals(lm_biomass_chla)
-summary(boxcox_model2) 
-# or arm::display(lm_biomass_chla)
-confint(boxcox_model2) 
-```
-
-```{r}
-par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(boxcox_model2, which= c(1:4))
-```
-
-Looking better!
-
-```{r}
-AICc(boxcox_model,boxcox_model2)
-```
-
-Seems that log transforming the gravity also improves AIC
-
-## Log tranformations
-
-```{r}
-gravity_biomass_data$log_gravity <- log(gravity_biomass_data$mean_gravity)
-
-log_gravity_m <- lm(mean_biomass ~ log_gravity, data = gravity_biomass_data)
-log_biomass_m <- lm(log(mean_biomass) ~ mean_gravity, data = gravity_biomass_data)
-log_log_m <- lm(log(mean_biomass) ~ log_gravity, data = gravity_biomass_data)
-
-
-AICc(base_model, log_gravity_m)
-AICc(log_biomass_m,log_log_m)
-
-```
-
-Log transformations of gravity not seem to have a huge impact. However, log transforming the biomass does seem to have an impact
-
-```{r}
-# Analyse the model 
-coef(log_biomass_m)
-#residuals(log_biomass_m)
-summary(log_biomass_m) 
-# or arm::display(log_biomass_m)
-confint(log_biomass_m) 
-```
-
-```{r}
-par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(log_biomass_m, which= c(1:4))
-```
-
-The boxcox tranformation with the log gravity seems to be giving the best results but not entirely sure about this.
-
-## Adding country as a fixed effect
-
-In a simple least squares regression:
-
-```{r}
-gravity_country_lm <- lm(mean_biomass ~ mean_gravity + factor(country), data = gravity_biomass_data)
-summary(gravity_country_lm)
-```
-
-```{r}
-boxcox2 <- boxcox(gravity_country_lm,
-             lambda = seq(-2, 2, by = 0.001), # Using a small step (0.001) gives a more precise λ estimate
-             plotit = TRUE)
-
-#Lambda estimate
-( lambda2 <- boxcox2$x[which.max(boxcox2$y)] )
-
-# ..
-loglik_max2 <- max(boxcox2$y)
-ci2 <- boxcox2$x[boxcox2$y >= loglik_max2 - 1.92]
-range(ci2)
-```
-
-Including country in the model does not materially change λ. Still strongly favors reciprocal square-root. This is important: λ depends on the full mean structure. The fact that λ ≈ −0.5 persists indicates the variance structure is intrinsic to biomass, not an artifact of omitted covariates.
-
-
-# Again, boxcox models
-
-```{r}
-
-# Just boxcox transformation
-boxcox_country_m1 <- lm(biomass_boxcox ~ mean_gravity + factor(country),
-               data = gravity_biomass_data)
-summary(boxcox_country_m1)
-
-# Boxcox transformation and log gravity
-boxcox_country_m2 <- lm(biomass_boxcox ~ log_gravity + factor(country),
-               data = gravity_biomass_data)
-summary(boxcox_country_m2)
-
-
-AICc(boxcox_country_m1, boxcox_country_m2)
-```
-
-Here it seems that the log transformation of gravity is better again, but again the impact isn't huge
-
-### Glm equivalents
-
-glm equivalent (no tranformations yet) would be:
-
-```{r}
-gravity_glm1 <- glm(mean_biomass ~ mean_gravity + country, data = gravity_biomass_data, family= gaussian(link="identity") )
-summary(gravity_glm1) 
-```
-
-not great ...
-
-### More appropriate GLM
-
-Firstly, we shall inspect the nature of the data. Some key questions: - Are values strictly positive? - Is the distribution right-skewed? - Does variance increase with the mean? - Any zeros?
-
-```{r}
-summary(gravity_biomass_data$mean_biomass)
-hist(gravity_biomass_data$mean_biomass)
-plot(density(gravity_biomass_data$mean_biomass))
-
-```
-
-# Log transformation
-
-```{r}
-gravity_log_glm <- glm(log(mean_biomass) ~ mean_gravity + country, data = gravity_biomass_data,
-    family = gaussian(link="identity"))
-
-```
-
-```{r}
-gravity_gamma_glm <- glm(mean_biomass ~ mean_gravity + country, data = gravity_biomass_data,
-    family = Gamma(link="log"))
-
-AICc(gravity_log_glm, gravity_gamma_glm)
-
-```
-
-```{r}
-gravity_logg_glm <- glm(log(mean_biomass) ~ log(mean_gravity) + country,
-            family = gaussian,
-            data = gravity_biomass_data)
-
-AICc(gravity_log_glm, gravity_logg_glm)
-
-```
-
-This tells us:
-
-The relationship between gravity and biomass is approximately linear in log space.
-
-Whether gravity is entered raw or logged barely changes fit.
-
-There is no strong curvature.
-
-This suggests the gravity range (after accounting for country) may not require power-law scaling.
-
-```{r}
-gravity_gamma <- glm(mean_biomass ~ mean_annual_chla + country,
-                  data = chla_model_data,
-                  family = Gamma(link = "log"))
-
-summary(gravity_gamma)
-(AIC_country <- AIC(chla_gamma))
-
-```
-
-Model Form
-
-Because of the log link: log(μ)=Xβ - so effects are multiplicative, not additive (μ=e\^Xβ).
-
-Effect of mean_annual_chla: - Estimate = –0.076 - p = 0.565 (clearly non-significant)
-
--   Convert to percent change: e\^−0.076−1=−7.3%
-
-Interpretation: For each 1-unit increase in mean annual chl-a, biomass changes by approximately –7%, but this effect is not statistically 95% CI would comfortably include 0% change.
-
-Country effects: - Kenya (estimate = 1.318) -\> e\^1.318≈3.73 (biomass in Kenya is approximately 3.7× higher than in the reference country) - Highly significant (p \< 0.001) -\> This is a very strong effect - Madagascar (estimate = 0.665) -\> e\^0.665≈1.95 (about 95% higher biomass than reference) - Significant (p = 0.045). - Mozambique and Tanzania marginal
-
-Dispersion parameter = 0.417 (this is similar to deviance/df ratio (\~0.32–0.4) below) There is no evidence of problematic overdispersion, so this gamma assumption seems appropriate.
-
-Biomass differed significantly among countries, with Kenya exhibiting approximately 3.7-fold higher biomass relative to the reference country. However, mean annual chlorophyll-a concentration was not a significant predictor of biomass (p = 0.56), indicating no detectable linear association after accounting for geographic variation.
-
-Checking for dispersion (which is one of the model assumptions) - ≈ 1 → dispersion matches model assumption - \> 1 → overdispersion - \< 1 → underdispersion
-
-```{r}
-summary(chla_gamma)$deviance / summary(chla_gamma)$df.residual
-```
-
-This indicates under dispersion relative to the Gamma variance assumption, which is generally less common and less dangerous (where the danger is inflated type I error.
-
-Model comparison:
-
-```{r}
-AIC(chla_glm1, chla_gamma)
-
-```
-
-That is a very large improvement. That is decisive evidence that the Gamma(log) model fits substantially better than the Gaussian model. A Gamma GLM with log link provided a substantially better fit than a Gaussian model (ΔAIC = 52.6), indicating a right-skewed error structure. However, mean annual chlorophyll-a did not significantly predict biomass after accounting for country-level differences.
-
-Compare to linear model:
-
-```{r}
-chla_loglm <- lm(log(mean_biomass) ~ mean_annual_chla + country,
-                 data = chla_model_data)
-summary(chla_loglm)
-
-```
-
-```{r}
-par(mfrow=c(2,2))
-plot(chla_gamma)
-```
-
-Residual patterns: - Slight upward trend in residual spread at higher fitted values. - Mild structure around fitted ≈ 7.4–7.6. - Not dramatic, but variance increases slightly with mean.
-
-The residual pattern looks broadly consistent with that assumption.
-
-```{r}
-par(mfrow=c(2,2))
-plot(chla_loglm)
-```
-
-Residual pattern: (in contrast to glm) - Residuals more evenly scattered. - Flatter LOESS trend. - Slight heteroscedasticity at high fitted values, but mild.
-
-Comparison: Diagnostic Gamma LogLM Winner Residual symmetry Good Slightly better LogLM (small edge) Variance pattern Acceptable Slightly flatter LogLM (small edge) Tail behavior Moderate right tail Similar Tie Theoretical appropriateness Strong Pragmatic Gamma
-
-#### Adding interaction
-
-```{r}
-chla_gamma_interaction <- glm(mean_biomass ~ mean_annual_chla * country,
-                  data = chla_model_data,
-                  family = Gamma(link = "log"))
-
-summary(chla_gamma_interaction)
-(AIC_interaction <- AIC(chla_gamma_interaction))
-```
-
-Note that while AIC is better, the slope estimates are unstable and non-significant. The data is likely insufficient to estimate country-specific slopes robustly. Evidence for heterogeneous chl-a effects is weak.
-
-i.e. Biomass differs among countries; chlorophyll-a shows no consistent effect.
-
-##### Plot
-
-```{r}
-#| label: biomass-vs-gravity-plot
-
-# Graph the data - X-Y scatterplot
-biomass_gravity_fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
-  ggplot(aes(x=mean_gravity, y=mean_biomass)) + 
-  geom_point() +
-  geom_smooth(method=lm) 
-
-biomass_gravity_fig1
-
-biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
-ggplot(aes(mean_gravity, log(mean_biomass), colour = country)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = lm, se = FALSE)
-biomass_gravity_fig2
-```
-
-## log
-
-```{r}
-#| label: biomass-vs-gravity-plot
-
-# Graph the data - X-Y scatterplot
-biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
-  ggplot(aes(x=mean_gravity, y=log(mean_biomass))) + 
-  geom_point() +
-  geom_smooth(method=lm) 
-
-biomass_gravity_fig2
-```
-
-##### Model
-
-```{r}
-#| label: biomass-vs-gravity-lm
-
-# Merge needed data
-gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
-
-# Build lm 
-lm_biomass_gravity <- lm(mean_biomass~mean_gravity,data = gravity_x_and_y_site) 
-# Analyse the model 
-summary(lm_biomass_gravity) 
-
-```
-
-### Log
-
-```{r}
-#| label: biomass-vs-gravity-lm
-
-# Merge needed data
-gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
-
-# Build lm 
-lm_biomass_gravity <- lm(log(mean_biomass)~mean_gravity,data = gravity_x_and_y_site) 
-# Analyse the model 
-summary(lm_biomass_gravity) 
-
-```
-
-## Comparing different gravity metrics
 
 # Biomass vs SST
 

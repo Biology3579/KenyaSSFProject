@@ -1,0 +1,1410 @@
+---
+title: "prelim_analyses_gravity_2009"
+format: html
+editor: visual
+---
+
+# Overview
+
+This document explores the relationship between human gravity and fish biomass
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+```{r}
+#| label: renv-restore
+# renv::restore()
+```
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load require libraries
+library(tidyverse)
+library(sf)
+library(arm)
+library(here)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(ggfortify) # extends ggplot2 for some more ease with stats
+library(MASS) # fits regression models etc.
+library(MuMIn) # multi-model inference (AIC etc.)
+library(AICcmodavg)
+```
+
+## Load data
+
+```{r}
+#| label: load-data
+
+fish_2009 <- readr::read_rds(here::here("processed_data", "clean_fish_2009.rds"))
+location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
+gravity_2009 <- readr::read_rds(here::here("city_data", "locations_with_grav.rds"))
+old_grav_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.csv"))
+```
+
+## Total Biomass
+
+This refers to an aggregate of all species.
+
+### Calculate total biomass per station, site, and country
+
+Biomass was quantified at the transect level, with each transect representing a replicate sample within a site. Because transects within a site are spatially proximate and not statistically independent, sites were treated as the independent units in all analyses. Need to explain the stations as well as many metrics are taken using such coordinates!!
+
+Environmental predictors were extracted at station coordinates and then averaged to the site level; stations were grouped into sites if they fell within 2 km of each other. Because environmental rasters are at \~4 km resolution, centroid-based extraction produced effectively identical values in our data (see diagnostic), so either approach is acceptable — we report station-mean values to preserve the sampled footprint.
+
+Total biomass was first calculated for each transect by summing biomass across species, and site-level biomass was then estimated as the mean of its 3–5 constituent transects. This approach ensures equal weighting of transects within sites and avoids pseudo-replication in comparisons among sites.
+
+```{r}
+#| label: calculate-total-data
+
+# Aggregate biomass at transect level
+transect_biomass <- fish_2009 %>%
+  group_by(site, station, ts_no) %>%
+  summarise(
+    transect_biomass = sum(tot_wt_g, na.rm = TRUE),
+    country = first(country),
+    .groups = "drop")
+
+# Mean biomass per site
+biomass_per_site <- transect_biomass %>%
+  group_by(site) %>%
+  summarise(
+    mean_biomass = mean(transect_biomass),
+    country = first(country),
+    .groups = "drop")
+
+# Mean biomass per country
+biomass_per_country <- biomass_per_site %>%
+  group_by(country) %>%
+  summarise(
+    mean_biomass = mean(mean_biomass, na.rm = TRUE))
+
+```
+
+### Check number of transects per site
+
+There are some that have fewer than 3 - either group or remove. There are also some with more than 5 - check these (maybe split if needs be)
+
+```{r}
+# Number of transects per site
+transect_biomass %>%
+  group_by(site) %>%
+  summarise(ts_no = n())
+
+# Number of transects per station
+transect_biomass %>% 
+    group_by(station) %>%
+  summarise(ts_no = n())
+```
+
+Then check number of sites per country:
+
+```{r}
+# Number of transects per site
+biomass_per_site %>%
+  group_by(country) %>%
+  summarise(site = n())
+```
+
+Note that both of these show that the design is unbalanced. Maybe I should balance this by ensuring an equal number of transects per site. 
+
+### Check the structure of biomass data
+
+```{r}
+# Overview of the data
+head(biomass_per_site,3) # see first three rows
+str(biomass_per_site) #structure of data
+summary(biomass_per_site) #summary of data
+
+# Histogram 
+( biomass_hist <- ggplot(biomass_per_site, aes(x = mean_biomass)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Mean site biomass "),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(mean_biomass ~ 1, data = biomass_per_site),
+       lambda = seq(-2, 2, 0.1))
+```
+
+The biomass seems to follow a moderately right-skewed distribution. 
+Boxcox suggests the data might need to be log transformed.
+
+### Calculate gravity means per site
+The gravity values were calculated for each station - as these were the reef sampling locations that were geo-referenced in the data. 
+This code aggregates human‐gravity metrics to the site level by calculating mean values of the stations (excluding missing data) for each variable within sites.
+Note that the gravity metrics are the updated metrics from 2009, and the old gravity refers to the market gravity extracted from [site].
+All the metrics are then combined into a table for ease of use. 
+```{r}
+#| label: calculate-env-var-means
+
+# Calculate mean human gravity per site
+gravity_2009_sites <- gravity_2009 %>%
+  st_drop_geometry() %>% # remove geometry before summarise
+  group_by(site) %>%
+  summarise(
+    market_gravity   = mean(market_grav, na.rm = TRUE),
+    settlement_tot_pop = mean(settlement_tot_pop, na.rm = TRUE),
+    nearest_pop_grav = mean(nearest_pop75_grav, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Calculate mean human gravity per site
+old_grav_2009_sites <- old_grav_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    old_gravity = mean(Grav_tot))
+
+# Combine gravity metrics into one table
+gravity_metrics_2009 <- gravity_2009_sites %>%
+  left_join(old_grav_2009_sites, by = "site")
+```
+
+
+# Biomass vs Human gravity
+
+## Old market gravity
+Firstly we explore the relationship between biomass and the market gravity extracted from [site] While this was calculated for [year], it has been used in other papers [such as samoilys, 2025] and therefore provides a good reference for comparison.
+
+### Explore the structure of the data
+We explore the distribution of the gravity variable to assess its suitability for parametric statistical modelling. 
+Visualising the histogram allows us to evaluate distributional properties such as skewness, dispersion, and the presence of outliers, which inform assumptions of normality and homoscedasticity. 
+The Box–Cox analysis formally evaluates whether a power transformation would improve normality and stabilize variance, thereby guiding appropriate transformation of the predictor prior to inclusion in subsequent models.
+```{r}
+
+# Histogram market gravity 
+( gravity_hist <- ggplot(gravity_metrics_2009, aes(x = old_gravity)) +
+  geom_histogram(bins = 10) +
+  labs(
+    x = expression(" Old market gravity"),
+    y = "Number of sites"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(old_gravity ~ 1, data = gravity_metrics_2009),
+       lambda = seq(-2, 2, 0.1))
+
+```
+The histogram shows that the market gravity metric is highly right-skewed, with most sites clustered at low values and a small number of extreme high values (strong positive skew and potential outliers). 
+This indicates a clear deviation from normality and suggests that the raw variable is unlikely to meet linear modelling assumptions.
+
+The Box–Cox analysis indicates an optimal negative λ (≈ −0.5), confirming that a decreasing power transformation is required and that the untransformed variable is inappropriate for parametric modelling. 
+Because λ values near the optimum yield similar likelihoods and log transformations are more interpretable, it is reasonable to compare a log transformation with a reciprocal-type transformation and select the most appropriate form based on subsequent model diagnostics.
+
+
+### Exploratory Plot
+Although prior diagnostics indicated that old_gravity is strongly right-skewed and likely requires transformation, we first fit a simple linear regression using the untransformed predictor as a baseline model. This provides a reference against which transformed models can be formally compared, allowing us to evaluate whether transformation improves model fit, residual behaviour, and inferential robustness.
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatter plot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE) %>%
+  ggplot(aes(x=old_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_gravity_fig1
+
+# Correlation
+with(merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE),
+    cor(old_gravity, mean_biomass))
+
+```
+The scatterplot and regression line suggest a weak negative relationship between human gravity and mean biomass, with biomass tending to decline slightly as gravity increases. However, variability is high, confidence intervals are wide—particularly at higher gravity values—and the correlation is small (r = −0.136), indicating that gravity explains little of the observed variation in biomass in the untransformed linear model.
+
+### Untransformed ls model
+
+We fitted a simple linear regression model with mean biomass as the response variable and centred old market gravity as the sole predictor. This represents the most parsimonious, untransformed baseline model against which subsequent transformed models can be compared.
+
+Note that the gravity predictor was mean-centred by subtracting its sample mean from each observation, so that a value of zero corresponds to the average gravity across sites. This reparameterisation does not change the estimated slope or its statistical significance, but it shifts the intercept to represent the expected biomass at average gravity rather than at gravity = 0, thereby improving the interpretability of the results.
+```{r}
+#| label: biomass-vs-chla-lm
+
+# Merge needed data
+og_model_data <- merge(biomass_per_site, gravity_metrics_2009[, c("site", "old_gravity")], by = "site", all = TRUE)
+
+# Centre old market gravity
+og_model_data$old_grav_centred <- as.numeric(scale(
+  og_model_data$old_gravity,
+  center = TRUE,
+  scale = FALSE ))
+
+# Build lm 
+base_model_og <- lm(mean_biomass~old_grav_centred,data = og_model_data) 
+```
+
+Analyse model:
+```{r}
+# Analyse the model 
+coef(base_model_og)
+summary(base_model_og) 
+confint(base_model_og) 
+```
+The model indicates a negative but non-significant association between gravity and biomass (β = −3.81 ± 3.59 SE, p = 0.292), with the 95% confidence interval spanning zero. The model explains very little variation in biomass (R² = 0.018), and the overall regression is not statistically significant (F₁,₆₀ = 1.13, p = 0.292). Thus, in its untransformed form, human gravity does not provide meaningful explanatory power for variation in biomass.
+
+#### Checking assumptions 
+
+```{r}
+
+# Extracting fitted values and residuals 
+og_model_data$predicted <- fitted.values(base_model_og)
+og_model_data$residuals <- residuals(base_model_og) 
+
+# Histogram of residuals 
+( og_residual_hist <- ggplot(og_model_data, aes(x = residuals)) +
+  # Change y to density so the curve matches the scale
+  geom_histogram(aes(y = after_stat(density)), bins = 10, fill = "lightgray", color = "white") +
+  geom_density(color = "black", size = 1) +
+  labs(
+    x = expression("Residuals"),
+    y = "Number of sites"
+  ) +
+  theme_bw() )
+```
+
+
+Residual checking of simple ls model
+To evaluate whether the assumptions of the linear model are satisfied, we examined standard diagnostic plots: residuals versus fitted values, a normal Q–Q plot, a scale–location plot, and Cook’s distance. These diagnostics assess linearity, homoscedasticity, normality of residuals, and the presence of influential observations.
+
+But model assumptions and violations:
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+# par(mar=c(1,1,1,1))
+plot( base_model_og, which= c(1:4))
+```
+The residuals versus fitted plot indicates increasing dispersion at higher fitted values, suggesting heteroscedasticity rather than constant error variance. This pattern is reinforced by the scale–location plot, where residual spread clearly increases with fitted biomass. The Q–Q plot further reveals departures from normality, particularly in the upper tail, consistent with right-skewed residuals and the presence of extreme values. Cook’s distance highlights several moderately influential observations, likely associated with sites exhibiting high gravity values and leverage.
+
+Taken together, these patterns indicate that key assumptions of normality and homoscedasticity are not satisfied under the untransformed specification, supporting the need for transformation before proceeding with formal inference.
+
+### Transformations
+
+Transformations were applied to improve adherence to linear regression assumptions, particularly normality and homoscedasticity, and to reduce the influence of extreme values. After each transformation, the distribution of the variable was re-examined to verify that skewness was reduced and that the transformation behaved as expected.
+These transformations amplifying predictive power and increasing the overall quality of the model
+
+```{r}
+
+# Transforming variables
+og_model_data$log_biomass <- log10(og_model_data$mean_biomass)
+og_model_data$log_old_grav <- log10(og_model_data$old_gravity)
+
+# Check transformations 
+
+( log_market_grav_hist <- ggplot(og_model_data, aes(x = log_old_grav)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Log-Transformed Old Gravity"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+# Reciprocal square-root transformation (λ ≈ -0.5)
+og_model_data$old_grav_recipr_sqrt <- 1 / sqrt(og_model_data$old_gravity)
+
+# Check distribution
+
+( recip_sqrt_market_grav_hist <- ggplot(og_model_data, 
+                                        aes(x = old_grav_recipr_sqrt)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Reciprocal Square-Root Old Gravity (1 / sqrt(Old Gravity))"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+The log-transformed gravity variable exhibits a substantially improved distribution relative to the raw scale. The strong right skew observed in the untransformed data is markedly reduced, and the values are more evenly distributed across the range. Although some mild skewness persists, the transformation compresses extreme high values and reduces leverage from previously influential observations. This suggests that a log transformation is effective in stabilising variance and improving conformity with linear modelling assumptions.
+
+The reciprocal square-root transformation also substantially alters the distribution relative to the raw scale. By strongly compressing large gravity values and stretching differences among smaller values, it reduces the influence of extreme high-gravity observations. The resulting distribution appears more symmetric than the original variable, although some skewness and clustering remain. Compared to the log transformation, the reciprocal square-root places greater weight on variation at the lower end of the gravity gradient, which may reduce leverage from high values but can also concentrate variability among low-gravity sites. Overall, this transformation is effective in mitigating extreme right-tail influence, but it should be noted that its interpretability is less straightforward than the log scale.
+
+#### Transformed models: log
+Model specification 
+To evaluate whether transformation improves model performance, we fitted three alternative linear models: (i) log-transformed biomass regressed on untransformed gravity, (ii) untransformed biomass regressed on log-transformed gravity, and (iii) a fully log–log model with both variables log-transformed. The gravity predictor was mean-centred prior to modelling to ensure that intercepts represent expected biomass at average gravity and to maintain numerical stability:
+```{r}
+
+# Centre logged market gravity
+og_model_data$log_old_grav_centred <- as.numeric(
+  scale(og_model_data$log_old_grav, center = TRUE, scale = FALSE)
+)
+
+# Transformed models 
+log_biomass_og <- lm(log_biomass~old_grav_centred,data = og_model_data) 
+biomass_log_og<- lm(mean_biomass~log_old_grav_centred,data = og_model_data) 
+log_biomass_log_og <- lm(log_biomass~log_old_grav_centred,data = og_model_data) 
+
+# Summaries of transformed models
+summary(log_biomass_og) 
+summary(biomass_log_og) 
+summary(log_biomass_log_og) 
+
+# or arm::display(lm_biomass_chla)
+```
+Across all transformed specifications, there remains no statistically supported relationship between human gravity and biomass. 
+In the model with log-transformed biomass and untransformed gravity, the slope is negative but non-significant (β = −7.69 × 10⁻⁵, p = 0.268), explaining approximately 2% of the variance (R² = 0.020). 
+When biomass is modelled against log-transformed gravity, explanatory power further declines (R² = 0.003), and the slope remains non-significant (p = 0.687). 
+The fully log–log model similarly shows no evidence of association (β = −0.0196, p = 0.812), with negligible explanatory power (R² < 0.001).
+
+Thus, although transformations improve distributional properties, they do not materially strengthen the relationship between gravity and biomass. The consistently small effect sizes and very low R² values indicate that human gravity, as measured here, provides minimal explanatory value for variation in site-level biomass.
+
+#### Transformed models: reciprocal sqrt 
+Model specification 
+To assess whether the Box–Cox–suggested reciprocal square-root transformation (λ ≈ −0.5) improves model performance, we fitted two linear models using the transformed gravity predictor: (i) untransformed biomass regressed on reciprocal square-root gravity, and (ii) log-transformed biomass regressed on reciprocal square-root gravity. 
+The transformed gravity variable was mean-centred prior to analysis so that intercepts represent expected biomass at average transformed gravity and to maintain numerical stability:
+```{r}
+
+# Centre logged market gravity
+og_model_data$old_grav_recipr_sqrt_centred <- as.numeric(
+  scale(og_model_data$old_grav_recipr_sqrt, center = TRUE, scale = FALSE)
+)
+
+# Transformed models 
+biomass_rsqrt_og <- lm(mean_biomass~old_grav_recipr_sqrt_centred,data = og_model_data)
+log_biomass_rsqrt_og <- lm(log_biomass~old_grav_recipr_sqrt_centred,data = og_model_data) 
+
+# Summaries of transformed models
+summary(biomass_rsqrt_og) 
+summary(log_biomass_rsqrt_og) 
+
+```
+The model with untransformed biomass shows no evidence of association between biomass and reciprocal square-root gravity (β = −2011, SE = 36874, p = 0.957). The explanatory power is effectively zero (R² ≈ 0.00005), indicating that the transformed predictor accounts for none of the variation in biomass.
+
+Similarly, when biomass is log-transformed, the relationship remains non-significant (β = −0.164, SE = 0.707, p = 0.818), with negligible explanatory power (R² ≈ 0.0009).
+
+Thus, although the reciprocal square-root transformation improves the distributional properties of the gravity variable, it does not strengthen the statistical relationship between gravity and biomass. Across specifications, effect sizes remain small, highly uncertain, and biologically negligible.
+
+
+#### Residual checking of transformations
+To determine whether transformation improved model adequacy, we examined the same set of diagnostic plots (residuals vs fitted, Q–Q plots, scale–location plots, and Cook’s distance) for each transformed specification:
+```{r}
+
+# log_biomass_old_market_grav
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(biomass_log_og, which= c(1:4))
+
+# biomass_log_old_market_grav
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_og, which= c(1:4))
+
+# log_biomass_log_old_market_grav
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_log_og, which= c(1:4))
+
+# biomass_rsqrt_old_market_grav
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(biomass_rsqrt_og, which= c(1:4))
+
+# log_biomass_rsqrt_old_market_grav
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_rsqrt_og, which= c(1:4))
+```
+Results:
+In the model with log-transformed gravity only (mean_biomass ~ log_gravity), the residual structure remains broadly similar to the untransformed model. Heteroscedasticity persists, with increasing spread at higher fitted values, and the Q–Q plot still shows deviation in the upper tail. Influential observations remain present.
+
+When biomass alone is log-transformed (log_biomass ~ gravity), residual variance is noticeably more stable across fitted values, and the Q–Q plot shows improved alignment with the normal reference line, although mild tail deviations remain. This indicates partial improvement in normality and homoscedasticity.
+
+The fully log–log model (log_biomass ~ log_gravity) shows the most consistent variance structure, with residuals more evenly distributed and closer to normality, though slight upper-tail deviations and a few influential observations persist.
+
+Models incorporating the reciprocal square-root transformation of gravity show a similar pattern: transforming gravity alone does not resolve heteroscedasticity or tail deviations, whereas models with log-transformed biomass exhibit improved variance stability and closer adherence to normality. However, the reciprocal square-root transformation provides no clear diagnostic advantage over the log transformation of gravity.
+
+Overall, transforming the response variable (log biomass) substantially improves adherence to model assumptions, whereas transforming gravity alone—whether via log or reciprocal square-root—offers limited benefit.
+
+### Check AICs
+Because AIC values are only comparable among models fitted to the same response variable on the same scale, model selection was restricted to specifications with log-transformed biomass as the response. We therefore compared the models including untransformed gravity, log-transformed gravity, and reciprocal square-root gravity as predictors:
+```{r}
+old_grav_base_models <- list(log_biomass_og, log_biomass_log_og, log_biomass_rsqrt_og)
+aictab(old_grav_base_models)
+```
+Model selection based on AICc indicates that the model with untransformed gravity predicting log biomass (Mod1) provides the best relative fit (AICc = 44.51). However, the log–log and reciprocal square-root models (Mod2 and Mod3) are within ΔAICc = 1.22 of the top model. Because models within ΔAICc < 2 are generally considered to have substantial support, all three models are statistically competitive.
+
+So, to conclude:
+When comparing functional forms of the gravity predictor (untransformed, log-transformed, and reciprocal square-root), there is no meaningful difference in inference. All three specifications yield very small, non-significant slope estimates, extremely low R² values, and nearly identical AICc scores. The ΔAICc values (< 2) indicate that the models are statistically indistinguishable in terms of fit.
+
+Residual diagnostics show that improvements in model assumptions are primarily driven by transforming the response variable (log biomass), not by transforming gravity. Changing the functional form of gravity—whether log or reciprocal square-root—does not materially improve variance structure, normality, or explanatory power relative to using gravity on its original scale.
+
+Overall, there is no statistical or ecological justification for preferring a transformed gravity predictor over the untransformed version. The absence of a detectable effect of gravity on biomass is robust to the choice of transformation.
+
+## Taking into account eco-region (country)
+
+### Fixed-effects model (separate)
+
+We will first separate this into each different eco-region (country for now)
+We will use log for ease of interpretation 
+```{r}
+# plot of biomass vs chlorophyll for a 'no pooling analysis'
+( separate_lm_plot <- ggplot(og_model_data, aes(x = log_old_grav_centred,
+           y = log_biomass)) + geom_point() + geom_smooth(method = "lm", formula = y ~ x) +
+  facet_grid(. ~ country) + theme_bw() + labs( x = " Logged Market Gravity",
+    y = "Log-Biomass", title = "No pooling analysis") )
+
+```
+
+Differences across countries!
+
+This analysis treats the relationship at each site as unique and independent of the others.
+
+### Combined fixed-effects model
+
+At the other extreme, we could simply pool all the data together in a single simple regression analysis: (same as above).
+
+```{r}
+# Graph the data - X-Y scatter plot
+combined_lm_plot <- gravity_model_data %>% 
+  ggplot(aes(x=log_market_grav_centred, y=log_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+combined_lm_plot
+```
+
+This model helps us to understand the analysis we want to build from these initial simple extremes.
+
+### Country as a fixed effect
+
+Note: - from above, we will carry on with the log_log model - we centre chla. In models including interactions, centering also makes main effects interpretable as effects evaluated at the mean of the interacting variable and can improve numerical stability in mixed-effects models. - We used sum-to-zero contrasts (effect coding) for country so that parameter estimates represent deviations from the overall mean rather than differences relative to an arbitrarily chosen reference country. Under effect coding, the intercept corresponds to the grand mean of the response (averaged across all observations), and each country coefficient represents that country’s deviation from this grand mean. In other words, coefficients quantify how much higher or lower a given country’s mean is compared to the overall mean.
+
+#### Additive model
+
+First we add it in an additive simple least squares regression. This additive model assumes that the biomass–chlorophyll slope is the same across all countries, but allows countries to differ in their mean biomass levels:
+
+```{r}
+# Set sum-to-zero contrasts for country (the grand mean is the baseline - not an arbitrary country level)
+contrasts(gravity_model_data$country) <- contr.sum(length(levels(gravity_model_data$country)))
+
+# Addtitive model
+mg_country_additive <- lm(log_biomass ~ log_market_grav_centred + country, data = gravity_model_data)
+summary(mg_country_additive) 
+```
+Output interpretation:
+...
+
+#### Interaction model
+
+This interaction model allows the biomass–chlorophyll slope to differ among countries rather than forcing a common slope.
+
+```{r}
+
+# Log-log interaction
+mg_country_interaction <- lm(log_biomass ~ log_market_grav_centred * country, data = gravity_model_data)
+summary(mg_country_interaction) 
+
+```
+...
+
+#### Test global, additive and interaction models
+
+```{r}
+#AIC
+interaction_test_models_grav <- list(log_biomass_log_mg, mg_country_additive, mg_country_interaction)
+aictab(interaction_test_models_grav) 
+
+# Classical F-test
+anova(log_biomass_log_mg, mg_country_additive, mg_country_interaction)
+```
+...
+
+
+### Try a GLM
+
+Given that biomass is positive and right-skewed, we additionally fitted generalized linear models using a Gamma error distribution with a log link, which models multiplicative effects directly on the original biomass scale and accommodates mean–variance relationships typical of ecological biomass data.
+
+First we begin with an additive model:
+
+```{r}
+# Additive
+glm_gamma_additive <- glm(
+  mean_biomass ~ log_chla_centred + country,
+  family = Gamma(link = "log"),
+  data = chla_model_data
+)
+
+summary(glm_gamma_additive)
+```
+
+Note that the Gamma GLM results closely mirror your Gaussian log–log results in terms of structure.
+
+In this additive Gamma model, the chlorophyll effect is negative but not statistically significant (p = 0.14), and country1 and country2 differ significantly from the regional mean. That is broadly consistent with your additive log–log model.
+
+Now let's check residuals:
+
+```{r}
+plot(glm_gamma_additive)
+```
+
+...
+
+Then we try the interaction, multiplicative model:
+
+```{r}
+glm_gamma_interaction <- glm(
+  mean_biomass ~ log_chla_centred * country,
+  family = Gamma(link = "log"),
+  data = chla_model_data
+)
+
+summary(glm_gamma_interaction)
+```
+
+In this interaction Gamma model, as with the lm model, the interaction term for country4 is strongly negative and significant (p = 0.004), and country3 shows marginal evidence of slope deviation. This is almost identical to what you saw in the Gaussian log–log interaction model. So the mean-structure conclusions are robust to distributional assumptions.
+
+```{r}
+plot(glm_gamma_interaction)
+```
+
+```{r}
+glm_test_models <- list(glm_gamma_additive, glm_gamma_interaction)
+aictab(glm_test_models)
+```
+
+The interaction Gamma model has substantially lower AICc (ΔAICc = 5.84) and carries about 95% of the model weight. That is strong support for slope heterogeneity under a Gamma error structure as well.
+
+Given that the linear model is simpler I will keep this :)
+
+
+
+### 
+
+
+
+
+
+
+
+
+```{r}
+
+
+# Build boxcox model
+boxcox_model <- lm(biomass_boxcox ~ mean_gravity,
+               data = gravity_biomass_data)
+
+# Plot
+(boxcox_plot <- ggplot(gravity_biomass_data,
+       aes(x = mean_gravity,
+           y = biomass_boxcox)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(
+    x = expression("Mean human gravity"),
+    y = expression("Box-Cox transformed biomass ("*lambda == -0.537*")")
+  ) +
+  theme_bw() )
+```
+
+```{r}
+# Analyse the model 
+coef(boxcox_model)
+#residuals(lm_biomass_chla)
+summary(boxcox_model) 
+# or arm::display(lm_biomass_chla)
+confint(boxcox_model) 
+```
+
+Outputs:
+
+### Residual checking of transformation
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(boxcox_model, which= c(1:4))
+
+```
+
+Diagnostics:
+
+Residuals vs Fitted: - Very flat (good linearity)
+
+Q–Q - Much improved relative to raw model - Slight tail deviation but acceptable
+
+Scale–Location - Nearly horizontal - Variance fairly stable
+
+Cook’s distance - Some moderate influence (16, 22) - No catastrophic leverage like before
+
+Assumptions are now reasonably satisfied.
+
+### Another option
+
+```{r}
+boxcox_model2 <- lm(biomass_boxcox ~ log(mean_gravity), data= gravity_biomass_data)
+
+
+
+```
+
+```{r}
+# Analyse the model 
+coef(boxcox_model2)
+#residuals(lm_biomass_chla)
+summary(boxcox_model2) 
+# or arm::display(lm_biomass_chla)
+confint(boxcox_model2) 
+```
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(boxcox_model2, which= c(1:4))
+```
+
+Looking better!
+
+```{r}
+AICc(boxcox_model,boxcox_model2)
+```
+
+Seems that log transforming the gravity also improves AIC
+
+## Log tranformations
+
+```{r}
+gravity_biomass_data$log_gravity <- log(gravity_biomass_data$mean_gravity)
+
+log_gravity_m <- lm(mean_biomass ~ log_gravity, data = gravity_biomass_data)
+log_biomass_m <- lm(log(mean_biomass) ~ mean_gravity, data = gravity_biomass_data)
+log_log_m <- lm(log(mean_biomass) ~ log_gravity, data = gravity_biomass_data)
+
+
+AICc(base_model, log_gravity_m)
+AICc(log_biomass_m,log_log_m)
+
+```
+
+Log transformations of gravity not seem to have a huge impact. However, log transforming the biomass does seem to have an impact
+
+```{r}
+# Analyse the model 
+coef(log_biomass_m)
+#residuals(log_biomass_m)
+summary(log_biomass_m) 
+# or arm::display(log_biomass_m)
+confint(log_biomass_m) 
+```
+
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_m, which= c(1:4))
+```
+
+The boxcox tranformation with the log gravity seems to be giving the best results but not entirely sure about this.
+
+## Adding country as a fixed effect
+
+In a simple least squares regression:
+
+```{r}
+gravity_country_lm <- lm(mean_biomass ~ mean_gravity + factor(country), data = gravity_biomass_data)
+summary(gravity_country_lm)
+```
+
+```{r}
+boxcox2 <- boxcox(gravity_country_lm,
+             lambda = seq(-2, 2, by = 0.001), # Using a small step (0.001) gives a more precise λ estimate
+             plotit = TRUE)
+
+#Lambda estimate
+( lambda2 <- boxcox2$x[which.max(boxcox2$y)] )
+
+# ..
+loglik_max2 <- max(boxcox2$y)
+ci2 <- boxcox2$x[boxcox2$y >= loglik_max2 - 1.92]
+range(ci2)
+```
+
+Including country in the model does not materially change λ. Still strongly favors reciprocal square-root. This is important: λ depends on the full mean structure. The fact that λ ≈ −0.5 persists indicates the variance structure is intrinsic to biomass, not an artifact of omitted covariates.
+
+
+
+## Market gravity
+
+```{r}
+
+# Overview of the data
+head(gravity_metrics_2009,3) # see first three rows
+str(gravity_metrics_2009) #structure of data
+summary(gravity_metrics_2009) #summary of data
+
+# Histogram market gravity 
+( gravity_hist <- ggplot(gravity_metrics_2009, aes(x = market_gravity)) +
+  geom_histogram(bins = 10) +
+  labs(
+    x = expression("Market  gravity"),
+    y = "Number of sites"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(market_gravity ~ 1, data = gravity_metrics_2009),
+       lambda = seq(-2, 2, 0.1))
+
+```
+
+Outputs:
+Market gravity is extremely right skewed. 
+The vast majority of sites have very low (or zero) values of market gravity, with only a small number of sites exhibiting very large values (in the millions). This indicates a heavy-tailed distribution with strong imbalance.
+Since it is not normally distributed, it will violate Gaussian assumptions if used on the raw scale. Any linear model on the untransformed scale would be dominated by the few extreme values.
+
+Additionally, since the dynamic range spans several orders of magnitude. That strongly suggests that effects, if present, are likely multiplicative rather than additive.
+
+The Box–Cox analysis confirms that market gravity should be log-transformed before modelling. Note that there is no need to use the exact maximum-likelihood λ; log is statistically justified and substantively coherent for a gravity-type variable spanning orders of magnitude.
+
+### Exploratory Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatter plot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE) %>%
+  ggplot(aes(x=market_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_gravity_fig1
+
+# Correlation
+with(merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE),
+    cor(market_gravity, mean_biomass))
+
+```
+
+Human gravity seems to have a negative effect on biomass, but the are large confidence intervals, and a lot of uncertainty in the data.
+
+### Untransformed ls model
+
+model 1 - the simplest untransforemd regression
+
+```{r}
+#| label: biomass-vs-chla-lm
+
+# Merge needed data
+gravity_model_data <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE)
+
+# Centre market gravity
+gravity_model_data$market_grav_centred <- as.numeric(scale(
+  gravity_model_data$market_gravity,
+  center = TRUE,
+  scale = FALSE ))
+
+# Build lm 
+base_model_mg <- lm(mean_biomass~market_grav_centred,data = gravity_model_data) 
+```
+
+Analyse model:
+
+```{r}
+# Analyse the model 
+coef(base_model_mg)
+summary(base_model_mg) 
+confint(base_model_mg) 
+```
+...
+
+#### Residual checking of simple ls model
+
+But model assumptions and violations:
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+# par(mar=c(1,1,1,1))
+plot( base_model_mg, which= c(1:4))
+```
+...
+
+### Transformations
+
+To improve model fit, we can transform the raw data to better conform to the regression assumptions, thereby amplifying predictive power and increasing the overall quality of the model.
+
+We also check how the distribution of the data changes after each transformation to ensure that everything is working as it should.
+
+```{r}
+
+# Transforming variables
+gravity_model_data$log_biomass <- log10(gravity_model_data$mean_biomass)
+gravity_model_data$log_market_grav <- log10(gravity_model_data$market_gravity)
+
+# Check transformations 
+
+( log_market_grav_hist <- ggplot(gravity_model_data, aes(x = log_market_grav)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Log-Transformed Market Gravity"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+The log-transformed distribution is still somewhat skewed, but it is dramatically compressed relative to the raw scale. The extreme values are no longer dominating the range.
+The distribution also looks mildly bimodal or clustered rather than smoothly normal. That is not necessarily a transformation problem. It may reflect real structural differences (e.g., remote vs highly connected sites, or country-level clustering). Transformations address skewness, not underlying multimodality caused by real grouping.
+
+Transformed models:
+Note that we will be centering the gravity data.
+In most ecological regression contexts, especially with interaction terms, centering is preferable because it avoids interpreting coefficients at unrealistic covariate values, It reduces collinearity with interaction terms, it improves numerical stability.
+
+```{r}
+
+# Centre logged market gravity
+gravity_model_data$log_market_grav_centred <- as.numeric(
+  scale(gravity_model_data$log_market_grav, center = TRUE, scale = FALSE)
+)
+
+# Transformed models 
+log_biomass_mg <- lm(log_biomass~market_grav_centred,data = gravity_model_data) 
+biomass_log_mg<- lm(mean_biomass~log_market_grav_centred,data = gravity_model_data) 
+log_biomass_log_mg <- lm(log_biomass~log_market_grav_centred,data = gravity_model_data) 
+
+# Summaries of transformed models
+summary(log_biomass_mg) 
+summary(biomass_log_mg) 
+summary(log_biomass_log_mg) 
+
+# or arm::display(lm_biomass_chla)
+#
+```
+
+...
+
+### Residual checking of transformations
+
+```{r}
+
+# log_biomass_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(biomass_log_mg, which= c(1:4))
+
+# biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_mg, which= c(1:4))
+
+# log_biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_log_mg, which= c(1:4))
+```
+
+ the log–log form better satisfies linear model assumptions ...
+
+### Check AICs
+
+Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_chla or log-log - provides the best fit
+
+```{r}
+grav_base_models <- list(log_biomass_mg, log_biomass_log_mg)
+aictab(grav_base_models)
+```
+...
+
+However, diagnostic plots suggested slightly improved homoscedasticity and linearity under the log–log specification. Given the equivalent statistical support and the expectation of power-law scaling in ecological productivity relationships, the log–log model was retained for subsequent analyses.
+
+\< Competing models were indistinguishable based on AICc (ΔAICc \< 0.1); however, the log–log specification exhibited improved residual structure and provides a biologically interpretable scaling relationship. We therefore retained the log-transformed predictor. \>
+
+### Comparing gravities
+```{r}
+grav_metric_models <- list(log_biomass_log_mg, log_biomass_log_og)
+aictab(grav_metric_models)
+
+anova(log_biomass_log_mg,log_biomass_log_og)
+```
+Perhaps as would be expected they are very very similar in fit. 
+
+## Taking into account eco-region (country)
+
+### Fixed-effects model (separate)
+
+We will first separate this into each different eco-region (country for now)
+
+```{r}
+# plot of biomass vs chlorophyll for a 'no pooling analysis'
+( og_separate_plot <- ggplot(gravity_model_data, aes(x = log_market_grav_centred,
+           y = log_biomass)) + geom_point() + geom_smooth(method = "lm", formula = y ~ x) +
+  facet_grid(. ~ country) + theme_bw() + labs( x = " Logged Old Market Gravity",
+    y = "Log-Biomass", title = "No pooling analysis") )
+
+```
+
+Great differences across countries!!
+
+This analysis treats the relationship at each site as unique and independent of the others.
+
+### Combined fixed-effects model
+
+At the other extreme, we could simply pool all the data together in a single simple regression analysis: (same as above).
+
+```{r}
+# Graph the data - X-Y scatter plot
+og_combined_plot <- og_model_data %>% 
+  ggplot(aes(x=log_old_grav_centred, y=log_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+og_combined_plot
+```
+
+This model helps us to understand the analysis we want to build from these initial simple extremes.
+
+### Country as a fixed effect
+
+Note: - from above, we will carry on with the log_log model - we centre chla. In models including interactions, centering also makes main effects interpretable as effects evaluated at the mean of the interacting variable and can improve numerical stability in mixed-effects models. - We used sum-to-zero contrasts (effect coding) for country so that parameter estimates represent deviations from the overall mean rather than differences relative to an arbitrarily chosen reference country. Under effect coding, the intercept corresponds to the grand mean of the response (averaged across all observations), and each country coefficient represents that country’s deviation from this grand mean. In other words, coefficients quantify how much higher or lower a given country’s mean is compared to the overall mean.
+
+#### Additive model
+
+First we add it in an additive simple least squares regression. This additive model assumes that the biomass–chlorophyll slope is the same across all countries, but allows countries to differ in their mean biomass levels:
+
+```{r}
+# Set sum-to-zero contrasts for country (the grand mean is the baseline - not an arbitrary country level)
+contrasts(og_model_data$country) <- contr.sum(length(levels(og_model_data$country)))
+
+# Addtitive model
+og_country_additive <- lm(log_biomass ~ log_old_grav_centred + country, data = og_model_data)
+summary(og_country_additive) 
+```
+Output interpretation:
+...
+
+#### Interaction model
+
+This interaction model allows the biomass–chlorophyll slope to differ among countries rather than forcing a common slope.
+
+```{r}
+
+# Log-log interaction
+og_country_interaction <- lm(log_biomass ~ log_old_grav_centred * country, data = og_model_data)
+summary(og_country_interaction) 
+
+```
+...
+
+#### Test global, additive and interaction models
+
+```{r}
+#AIC
+interaction_test_models_og <- list(log_biomass_log_og, og_country_additive, og_country_interaction)
+aictab(interaction_test_models_og) 
+
+# Classical F-test
+anova(log_biomass_log_og, og_country_additive, og_country_interaction)
+```
+Note that for 
+
+
+### Try a GLM
+
+Given that biomass is positive and right-skewed, we additionally fitted generalized linear models using a Gamma error distribution with a log link, which models multiplicative effects directly on the original biomass scale and accommodates mean–variance relationships typical of ecological biomass data.
+
+First we begin with an additive model:
+
+```{r}
+# Additive
+glm_gamma_additive <- glm(
+  mean_biomass ~ log_chla_centred + country,
+  family = Gamma(link = "log"),
+  data = chla_model_data
+)
+
+summary(glm_gamma_additive)
+```
+
+Note that the Gamma GLM results closely mirror your Gaussian log–log results in terms of structure.
+
+In this additive Gamma model, the chlorophyll effect is negative but not statistically significant (p = 0.14), and country1 and country2 differ significantly from the regional mean. That is broadly consistent with your additive log–log model.
+
+Now let's check residuals:
+
+```{r}
+plot(glm_gamma_additive)
+```
+
+...
+
+Then we try the interaction, multiplicative model:
+
+```{r}
+glm_gamma_interaction <- glm(
+  mean_biomass ~ log_chla_centred * country,
+  family = Gamma(link = "log"),
+  data = chla_model_data
+)
+
+summary(glm_gamma_interaction)
+```
+
+In this interaction Gamma model, as with the lm model, the interaction term for country4 is strongly negative and significant (p = 0.004), and country3 shows marginal evidence of slope deviation. This is almost identical to what you saw in the Gaussian log–log interaction model. So the mean-structure conclusions are robust to distributional assumptions.
+
+```{r}
+plot(glm_gamma_interaction)
+```
+
+```{r}
+glm_test_models <- list(glm_gamma_additive, glm_gamma_interaction)
+aictab(glm_test_models)
+```
+
+The interaction Gamma model has substantially lower AICc (ΔAICc = 5.84) and carries about 95% of the model weight. That is strong support for slope heterogeneity under a Gamma error structure as well.
+
+Given that the linear model is simpler I will keep this :)
+
+
+
+### 
+
+
+## Settlement gravity (settlement top pop)
+
+```{r}
+
+# Histogram market gravity 
+( gravity_hist <- ggplot(gravity_metrics_2009, aes(x = settlement_tot_pop)) +
+  geom_histogram(bins = 10) +
+  labs(
+    x = expression("Settlement tot pop"),
+    y = "Number of sites"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(settlement_tot_pop ~ 1, data = gravity_metrics_2009),
+       lambda = seq(-2, 2, 0.1))
+
+```
+
+Outputs:
+Settlement gravity is extremely right skewed. 
+The Box–Cox analysis confirms that settlement gravity should be log-transformed before modelling. Note that there is no need to use the exact maximum-likelihood λ; log is statistically justified and substantively coherent for a gravity-type variable spanning orders of magnitude.
+
+### Exploratory Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatter plot
+biomass_settle_tot_fig1 <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE) %>%
+  ggplot(aes(x=settlement_tot_pop, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_settle_tot_fig1
+
+# Correlation
+with(merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE),
+    cor(settlement_tot_pop, mean_biomass))
+
+```
+
+Human gravity seems to have a negative effect on biomass, but the are large confidence intervals, and a lot of uncertainty in the data.
+
+### Untransformed ls model
+
+model 1 - the simplest untransforemd regression
+
+```{r}
+#| label: biomass-vs-chla-lm
+
+# Merge needed data
+gravity_model_data <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE)
+
+# Centre market gravity
+gravity_model_data$settlement_tot_centred <- as.numeric(scale(
+  gravity_model_data$settlement_tot_pop,
+  center = TRUE,
+  scale = FALSE ))
+
+# Build lm 
+base_model_st <- lm(mean_biomass~settlement_tot_centred,data = gravity_model_data) 
+```
+
+Analyse model:
+
+```{r}
+# Analyse the model 
+coef(base_model_st)
+summary(base_model_st) 
+confint(base_model_st) 
+```
+...
+
+#### Residual checking of simple ls model
+
+But model assumptions and violations:
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+# par(mar=c(1,1,1,1))
+plot( base_model_st, which= c(1:4))
+```
+...
+
+### Transformations
+
+To improve model fit, we can transform the raw data to better conform to the regression assumptions, thereby amplifying predictive power and increasing the overall quality of the model.
+
+We also check how the distribution of the data changes after each transformation to ensure that everything is working as it should.
+
+```{r}
+
+# Transforming variables
+gravity_model_data$log_biomass <- log10(gravity_model_data$mean_biomass)
+gravity_model_data$log_settlement_tot <- log10(gravity_model_data$settlement_tot_pop)
+
+# Check transformations 
+
+( log_settlement_tot_hist <- ggplot(gravity_model_data, aes(x = log_settlement_tot)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Log-Transformed Settlement Tot Pop"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+
+The distribution also looks mildly bimodal or clustered rather than smoothly normal. That is not necessarily a transformation problem. It may reflect real structural differences (e.g., remote vs highly connected sites, or country-level clustering). Transformations address skewness, not underlying multimodality caused by real grouping.
+
+Transformed models:
+Note that we will be centering the gravity data.
+In most ecological regression contexts, especially with interaction terms, centering is preferable because it avoids interpreting coefficients at unrealistic covariate values, It reduces collinearity with interaction terms, it improves numerical stability.
+
+```{r}
+
+# Centre logged market gravity
+gravity_model_data$log_settlement_tot_centred <- as.numeric(
+  scale(gravity_model_data$log_settlement_tot, center = TRUE, scale = FALSE)
+)
+
+# Transformed models 
+log_biomass_st <- lm(log_biomass~settlement_tot_centred,data = gravity_model_data) 
+biomass_log_st<- lm(mean_biomass~log_settlement_tot_centred,data = gravity_model_data) 
+log_biomass_log_st <- lm(log_biomass~log_settlement_tot_centred,data = gravity_model_data) 
+
+# Summaries of transformed models
+summary(log_biomass_st) 
+summary(biomass_log_st) 
+summary(log_biomass_log_st) 
+
+```
+
+...
+
+### Residual checking of transformations
+
+```{r}
+
+# log_biomass_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(biomass_log_st, which= c(1:4))
+
+# biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_st, which= c(1:4))
+
+# log_biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_log_st, which= c(1:4))
+```
+
+ the log–log form better satisfies linear model assumptions ...
+
+### Check AICs
+
+Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_chla or log-log - provides the best fit
+
+```{r}
+st_base_models <- list(log_biomass_st, log_biomass_log_st)
+aictab(st_base_models)
+```
+...
+
+However, diagnostic plots suggested slightly improved homoscedasticity and linearity under the log–log specification. Given the equivalent statistical support and the expectation of power-law scaling in ecological productivity relationships, the log–log model was retained for subsequent analyses.
+
+\< Competing models were indistinguishable based on AICc (ΔAICc \< 0.1); however, the log–log specification exhibited improved residual structure and provides a biologically interpretable scaling relationship. We therefore retained the log-transformed predictor. \>
+
+### Comparing gravities
+```{r}
+grav_metric_models2 <- list(log_biomass_log_mg, log_biomass_log_st)
+aictab(grav_metric_models2)
+
+anova(log_biomass_log_mg,log_biomass_log_st)
+```
+Settlement seems to fit better than Market grav!! 
+
+## Settlement gravity (nearest pop grav)
+
+```{r}
+
+#Change format of settlement pop gravity
+gravity_metrics_2009$nearest_pop_grav <-  format(gravity_metrics_2009$nearest_pop_grav, scientific = FALSE)
+gravity_metrics_2009$nearest_pop_grav <-  as.numeric(gravity_metrics_2009$nearest_pop_grav)
+
+# Histogram market gravity 
+( nearest_pop_hist <- ggplot(gravity_metrics_2009, aes(x = nearest_pop_grav)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Nearest Pop Grav"),
+    y = "Number of sites"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(nearest_pop_grav ~ 1, data = gravity_metrics_2009),
+       lambda = seq(-2, 2, 0.1))
+
+```
+
+Outputs:
+Settlement gravity is extremely right skewed. 
+The Box–Cox analysis confirms that settlement gravity should be log-transformed before modelling. Note that there is no need to use the exact maximum-likelihood λ; log is statistically justified and substantively coherent for a gravity-type variable spanning orders of magnitude.
+
+### Exploratory Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatter plot
+biomass_nearest_pop_grav_fig1 <- merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE) %>%
+  ggplot(aes(x=nearest_pop_grav, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+biomass_nearest_pop_grav_fig1
+
+# Correlation
+with(merge(x = biomass_per_site, y = gravity_metrics_2009, by = "site", all = TRUE),
+    cor(nearest_pop_grav, mean_biomass))
+
+```
+
+Human gravity seems to have a negative effect on biomass, but the are large confidence intervals, and a lot of uncertainty in the data.
+
+### Untransformed ls model
+
+model 1 - the simplest untransforemd regression
+
+```{r}
+#| label: biomass-vs-chla-lm
+
+#nesure correct formatting
+#Change format of settlement pop gravity
+gravity_model_data$nearest_pop_grav <-  format(gravity_model_data$nearest_pop_grav, scientific = FALSE)
+gravity_model_data$nearest_pop_grav <-  as.numeric(gravity_model_data$nearest_pop_grav)
+
+# Centre market gravity
+gravity_model_data$nearest_pop_grav_centred <- as.numeric(scale(
+  gravity_model_data$nearest_pop_grav,
+  center = TRUE,
+  scale = FALSE ))
+
+# Build lm 
+base_model_sg <- lm(mean_biomass~nearest_pop_grav_centred,data = gravity_model_data) 
+```
+
+Analyse model:
+
+```{r}
+# Analyse the model 
+coef(base_model_sg)
+summary(base_model_sg) 
+confint(base_model_sg) 
+```
+...
+
+#### Residual checking of simple ls model
+
+But model assumptions and violations:
+```{r}
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+# par(mar=c(1,1,1,1))
+plot( base_model_st, which= c(1:4))
+```
+...
+
+### Transformations
+
+To improve model fit, we can transform the raw data to better conform to the regression assumptions, thereby amplifying predictive power and increasing the overall quality of the model.
+
+We also check how the distribution of the data changes after each transformation to ensure that everything is working as it should.
+
+```{r}
+
+# Transforming variables
+gravity_model_data$log_biomass <- log10(gravity_model_data$mean_biomass)
+gravity_model_data$log_nearest_pop_grav <- log10(gravity_model_data$nearest_pop_grav)
+
+# Check transformations 
+
+( log_nearest_pop_grav_hist <- ggplot(gravity_model_data, aes(x = log_nearest_pop_grav)) +
+  geom_histogram(bins = 20) +
+  labs(
+    x = expression("Log-Transformed Settlement Tot Pop"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+
+The distribution also looks mildly bimodal or clustered rather than smoothly normal. That is not necessarily a transformation problem. It may reflect real structural differences (e.g., remote vs highly connected sites, or country-level clustering). Transformations address skewness, not underlying multimodality caused by real grouping.
+
+Transformed models:
+Note that we will be centering the gravity data.
+In most ecological regression contexts, especially with interaction terms, centering is preferable because it avoids interpreting coefficients at unrealistic covariate values, It reduces collinearity with interaction terms, it improves numerical stability.
+
+```{r}
+
+# Centre logged market gravity
+gravity_model_data$log_nearest_pop_grav_centred <- as.numeric(
+  scale(gravity_model_data$log_nearest_pop_grav, center = TRUE, scale = FALSE)
+)
+
+# Transformed models 
+log_biomass_sg <- lm(log_biomass~nearest_pop_grav_centred,data = gravity_model_data) 
+biomass_log_sg <- lm(mean_biomass~log_nearest_pop_grav_centred,data = gravity_model_data) 
+log_biomass_log_sg <- lm(log_biomass~log_nearest_pop_grav_centred,data = gravity_model_data) 
+
+# Summaries of transformed models
+summary(log_biomass_sg) 
+summary(biomass_log_sg) 
+summary(log_biomass_log_sg) 
+
+```
+
+...
+
+### Residual checking of transformations
+
+```{r}
+
+# log_biomass_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(biomass_log_st, which= c(1:4))
+
+# biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_st, which= c(1:4))
+
+# log_biomass_log_chla
+par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
+plot(log_biomass_log_st, which= c(1:4))
+```
+
+ the log–log form better satisfies linear model assumptions ...
+
+### Check AICs
+
+Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_chla or log-log - provides the best fit
+
+```{r}
+sg_base_models <- list(log_biomass_sg, log_biomass_log_sg)
+aictab(sg_base_models)
+```
+...
+
+However, diagnostic plots suggested slightly improved homoscedasticity and linearity under the log–log specification. Given the equivalent statistical support and the expectation of power-law scaling in ecological productivity relationships, the log–log model was retained for subsequent analyses.
+
+\< Competing models were indistinguishable based on AICc (ΔAICc \< 0.1); however, the log–log specification exhibited improved residual structure and provides a biologically interpretable scaling relationship. We therefore retained the log-transformed predictor. \>
+
+### Comparing gravities
+```{r}
+grav_metric_models_all <- list(log_biomass_log_og, log_biomass_log_mg, log_biomass_log_st, log_biomass_log_sg)
+aictab(grav_metric_models_all)
+
+anova(log_biomass_log_og, log_biomass_log_mg, log_biomass_log_st, log_biomass_log_sg)
+```
+Settlement gravity seems to fit better!! 
+

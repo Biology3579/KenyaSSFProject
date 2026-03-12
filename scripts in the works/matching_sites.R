@@ -84,7 +84,7 @@ station_areas_2009 <- stations_2009 %>%
     cluster_id = 0
   )
 
-#cluster circles tat overlap
+#cluster circles that overlap
 next_id <- 1
 n <- nrow(station_areas_2009)
 

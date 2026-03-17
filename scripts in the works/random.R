@@ -144,3 +144,42 @@ lm_biomass_country <- lm(mean_biomass~country,data = biomass_per_country)
 # Analyse the model 
 anova(lm_biomass_country)
 summary(lm_biomass_country)
+
+
+## parital effects model
+
+library(effects)
+model <- glm(biomass~chlorophyll +gravity +DHW, family = Gamma(link = log), data=data)
+
+plot (allEffects(model))
+
+## alterantive
+library(ggeffects)
+pred <- ggpredict(model,terms = 'chlorophyll')
+
+plot(pred)
+
+## ggplot
+library(ggplot2)
+ggplot(pred, aes(x, predicted)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha=0.2)
+
+
+# panel plot
+library(ggeffects)
+library(ggplot2)
+
+pred_chl <- ggpredict(model_total, terms="chlorophyll")
+
+ggplot(pred_chla, aes(x, predicted)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha=0.2)
+  labs(x="Chlorophyll-a", y="Predicted Biomass")
+  
+# To combine panels:
+library(patchwork)
+# or 
+library(cowplot)
+  
+  

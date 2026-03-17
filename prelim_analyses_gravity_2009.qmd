@@ -1460,11 +1460,7 @@ cat("Proportion of zeros:", zeros, "\n")
 boxcox(lm((mean_pisc_biomass + 1) ~ 1, data = piscivore_data))
 ```
 
-This is textbook Tweedie (1 < p < 2) structure:
-- Point mass at 0
-- Continuous positive values
-- Strong right skew
-- Variance likely increases with mean
+This is textbook Tweedie (1 \< p \< 2) structure: - Point mass at 0 - Continuous positive values - Strong right skew - Variance likely increases with mean
 
 So a Tweedie model is appropriate here.
 
@@ -1524,12 +1520,10 @@ Instead, we can try to use a Tweedie distribution
 
 ## Tweedie
 
-Before we can model our data using a tweedie distribution, we fit an intercept-only model, to estimate:
-- The power parameter (p)
-- The dispersion parameter (φ)
-- The overall mean μ
+Before we can model our data using a tweedie distribution, we fit an intercept-only model, to estimate: - The power parameter (p) - The dispersion parameter (φ) - The overall mean μ
 
 We can do this using the gam() function as follows:
+
 ```{r}
 pisc_biomass_tweedie <- gam(mean_pisc_biomass ~ 1, family = tw(link = "log"), data = pisc_model_data)
 
@@ -1538,17 +1532,15 @@ summary(pisc_biomass_tweedie)
 # Estimated mean on original scale
 exp(coef(pisc_biomass_tweedie))
 ```
-Estimated power parameter:
-Tweedie(p = 1.465) - which is indeed between 1 and 2, confirming that this is a compound Poisson-Gamma distribution, whereby the zeros are generated through the Poisson part and the positive values are sums of Gamma draws.
 
-Estimated dispersion (φ)
-Scale est. = 48.252 - this controls how variable the biomass is around the mean (higher φ → more spread for a given μ.)
+Estimated power parameter: Tweedie(p = 1.465) - which is indeed between 1 and 2, confirming that this is a compound Poisson-Gamma distribution, whereby the zeros are generated through the Poisson part and the positive values are sums of Gamma draws.
 
-Estimated mean μ
-exp(Intercept) = 1235.874, as would be expected (same as the sample mean)
+Estimated dispersion (φ) Scale est. = 48.252 - this controls how variable the biomass is around the mean (higher φ → more spread for a given μ.)
 
+Estimated mean μ exp(Intercept) = 1235.874, as would be expected (same as the sample mean)
 
 Now we fit the full tweedie model:
+
 ```{r}
 pisc_tweedie_gam <- gam(mean_pisc_biomass ~ log_sg_centred,
                family = tw(link = "log"),
@@ -1556,7 +1548,9 @@ pisc_tweedie_gam <- gam(mean_pisc_biomass ~ log_sg_centred,
 
 summary(pisc_tweedie_gam)
 ```
+
 Then we estiamte...
+
 ```{r}
 p_est <- tweedie.profile(mean_pisc_biomass ~ log_sg_centred,
                          data = pisc_model_data)
@@ -1565,6 +1559,7 @@ p_est$xi.max
 ```
 
 Now we fit it into a glm format:
+
 ```{r}
 library(statmod)
 
@@ -1585,9 +1580,7 @@ par(mfrow = c(2,2))
 gam.check(pisc_tweedie_gam)
 ```
 
-
 ...
-
 
 ### Check AICs
 
@@ -1618,9 +1611,11 @@ delta_aic <- aic_vals - min(aic_vals)
 delta_aic
 
 ```
+
 Indeed it seems that the tweedie model is better, yay!
 
 ### Test out other gravities!
+
 ```{r}
 pisc_tweedie_tmb_og <- glmmTMB(mean_pisc_biomass ~ log_og_centred,
                             data = pisc_model_data,
@@ -1647,6 +1642,7 @@ aic_vals_grav
 
 ( delta_aic_grav <- aic_vals_grav - min(aic_vals_grav) )
 ```
+
 All of them are similar!! So we stick with settlement gravity as it seems to have the best fit for total biomass.
 
 # Excavators VS Settlement Gravity
@@ -1678,6 +1674,7 @@ cat("Proportion of zeros:", zeros, "\n")
 # Boxcox (with constant to deal with 0-values)
 boxcox(lm((mean_exc_biomass + 1) ~ 1, data = excavators_data))
 ```
+
 Cool, again it seems a tweedie distribution might be the right choice
 
 ### GLM
@@ -1734,6 +1731,7 @@ Instead, we can try to use a Tweedie distribution
 ## Tweedie
 
 Tweedie model, first using gam:
+
 ```{r}
 exc_tweedie_gam <- gam(mean_exc_biomass ~ log_sg_centred,
                family = tw(link = "log"),
@@ -1743,6 +1741,7 @@ summary(exc_tweedie_gam)
 ```
 
 Then we estiamte...
+
 ```{r}
 exc_p_est <- tweedie.profile(mean_exc_biomass ~ log_sg_centred,
                          data = exc_model_data)
@@ -1751,6 +1750,7 @@ exc_p_est$xi.max
 ```
 
 Now we fit it into a glm format:
+
 ```{r}
 library(statmod)
 
@@ -1763,6 +1763,7 @@ summary(exc_tweedie_glm)
 ```
 
 Residuals again:
+
 ```{r}
 par(mfrow = c(2,2))
 gam.check(exc_tweedie_gam)
@@ -1794,11 +1795,10 @@ exc_delta_aic <- exc_aic_vals - min(exc_aic_vals)
 exc_delta_aic
 
 ```
+
 Again tweedie fits well!
 
-
 ### Test out other gravities!
-
 
 ```{r}
 exc_tweedie_tmb_og <- glmmTMB(mean_exc_biomass ~ log_og_centred,
@@ -1826,6 +1826,7 @@ exc_aic_vals_grav
 
 ( delta_aic_grav <- exc_aic_vals_grav - min(exc_aic_vals_grav) )
 ```
+
 Settlement gravity is the best! as perhaps expected!
 
 # Corralivores VS Settlement Gravity
@@ -1857,6 +1858,7 @@ cat("Proportion of zeros:", zeros, "\n")
 # Boxcox (with constant to deal with 0-values)
 boxcox(lm((mean_coralliv_biomass + 1) ~ 1, data = corallivore_data))
 ```
+
 Cool, again it seems a tweedie distribution might be the right choice
 
 ### GLM
@@ -1913,6 +1915,7 @@ Instead, we can try to use a Tweedie distribution
 ## Tweedie
 
 Tweedie model, first using gam:
+
 ```{r}
 coralliv_tweedie_gam <- gam(mean_coralliv_biomass ~ log_sg_centred,
                family = tw(link = "log"),
@@ -1922,6 +1925,7 @@ summary(coralliv_tweedie_gam)
 ```
 
 Then we estiamte...
+
 ```{r}
 coralliv_p_est <- tweedie.profile(mean_coralliv_biomass ~ log_sg_centred,
                          data = coralliv_model_data)
@@ -1930,6 +1934,7 @@ coralliv_p_est$xi.max
 ```
 
 Now we fit it into a glm format:
+
 ```{r}
 library(statmod)
 
@@ -1942,6 +1947,7 @@ summary(coralliv_tweedie_glm)
 ```
 
 Residuals again:
+
 ```{r}
 par(mfrow = c(2,2))
 gam.check(coralliv_tweedie_gam)
@@ -1973,11 +1979,10 @@ coralliv_delta_aic <- coralliv_aic_vals - min(coralliv_aic_vals)
 coralliv_delta_aic
 
 ```
+
 Again tweedie fits well!
 
-
 ### Test out other gravities!
-
 
 ```{r}
 coralliv_tweedie_tmb_og <- glmmTMB(mean_coralliv_biomass ~ log_og_centred,
@@ -2005,17 +2010,8 @@ coralliv_aic_vals_grav
 
 ( delta_aic_grav <- coralliv_aic_vals_grav - min(coralliv_aic_vals_grav) )
 ```
+
 Old gravity seems better, but not hugely significant!
-
-
-
-
-
-
-
-
-
-
 
 # Grazers and Detritivores VS Settlement Gravity
 
@@ -2046,6 +2042,7 @@ cat("Proportion of zeros:", zeros, "\n")
 # Boxcox (with constant to deal with 0-values)
 boxcox(lm((mean_grz_detr_biomass + 1) ~ 1, data = grazer_detritiv_data))
 ```
+
 Cool, again it seems a tweedie distribution might be the right choice
 
 ### GLM
@@ -2102,6 +2099,7 @@ Instead, we can try to use a Tweedie distribution
 ## Tweedie
 
 Tweedie model, first using gam:
+
 ```{r}
 grz_detr_tweedie_gam <- gam(mean_grz_detr_biomass ~ log_sg_centred,
                family = tw(link = "log"),
@@ -2111,6 +2109,7 @@ summary(grz_detr_tweedie_gam)
 ```
 
 Then we estimate...
+
 ```{r}
 grz_detr_p_est <- tweedie.profile(mean_grz_detr_biomass ~ log_sg_centred,
                          data = grz_detr_model_data)
@@ -2119,6 +2118,7 @@ grz_detr_p_est$xi.max
 ```
 
 Now we fit it into a glm format:
+
 ```{r}
 library(statmod)
 
@@ -2131,6 +2131,7 @@ summary(grz_detr_tweedie_glm)
 ```
 
 Residuals again:
+
 ```{r}
 par(mfrow = c(2,2))
 gam.check(grz_detr_tweedie_gam)
@@ -2162,11 +2163,10 @@ grz_detr_delta_aic <- grz_detr_aic_vals - min(grz_detr_aic_vals)
 grz_detr_delta_aic
 
 ```
+
 Again tweedie fits well!
 
-
 ### Test out other gravities!
-
 
 ```{r}
 grz_detr_tweedie_tmb_og <- glmmTMB(mean_grz_detr_biomass ~ log_og_centred,
@@ -2194,7 +2194,5 @@ grz_detr_aic_vals_grav
 
 ( delta_aic_grav <- grz_detr_aic_vals_grav - min(grz_detr_aic_vals_grav) )
 ```
+
 Settlement gravity seems better, which again is what is to be expected and also produces the most significant result!
-
-
-

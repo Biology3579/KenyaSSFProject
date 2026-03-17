@@ -1,5 +1,5 @@
 ---
-title: "prelim_analyses_chla_2009"
+title: "prelim_analyses_temp_2009"
 format: html
 editor: visual
 ---
@@ -51,7 +51,7 @@ library(glmmTMB)
 
 fish_2009 <- readr::read_rds(here::here("processed_data", "clean_fish_2009.rds"))
 location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
-chla_2009 <- read.csv(here::here("processed_data", "locations_with_chla_2009.csv"))
+dhw_2009 <- readr::read_rds(here::here("processed_data", "locations_with_dhw_2009.rds"))
 
 ```
 
@@ -110,17 +110,6 @@ transect_biomass %>%
   summarise(ts_no = n())
 ```
 
-Then check number of sites per country:
-
-```{r}
-# Number of transects per site
-biomass_per_site %>%
-  group_by(country) %>%
-  summarise(site = n())
-```
-
-Note that both of these show that the design is unbalanced. Maybe I should balance this by ensuring an equal number of transects per site.
-
 ### Biomass
 
 Check the structure of biomass data
@@ -145,65 +134,67 @@ boxcox(lm(mean_biomass ~ 1, data = biomass_per_site),
        lambda = seq(-2, 2, 0.1))
 ```
 
-The biomass seems to follow a moderately right-skewed distribution. Boxcox suggests the data might need to be log transformed.
-
 ### Calculate env. variable means
 
 ```{r}
 #| label: calculate-env-var-means
 
-# Calculate mean chla per site
-chla_2009_sites <- chla_2009 %>% 
+# Calculate mean dhw per site
+dhw_2009_sites <- dhw_2009 %>% 
   group_by(site) %>% 
-  summarise(
-    mean_annual_chla = mean(chla_annual_mean))
+  summarise(mean_max_dhw = mean(max_dhw))
+
+# alterantive:
+# dhw_2009_sites2 <- dhw_2009 %>% 
+#   group_by(site) %>% 
+#   summarise(
+#     mean_dhw_all = mean(dhw_sum, na.rm = TRUE),
+#     mean_dhw_when_present = mean(dhw_sum[dhw_sum > 0], na.rm = TRUE),
+#     proportion_zero = mean(dhw_sum == 0, na.rm = TRUE)
+#   )
 
 ```
 
-# Analysing Biomass vs Chlorophyll-a
+# Biomass vs DHW
 
-## Chlor-a
+## DHW
 
 ```{r}
 
 # Overview of the data
-head(chla_2009_sites,3) # see first three rows
-str(chla_2009_sites) #structure of data
-summary(chla_2009_sites) #summary of data
+head(dhw_2009_sites,3) # see first three rows
+str(dhw_2009_sites) #structure of data
+summary(dhw_2009_sites) #summary of data
 
 # Histogram 
-( chla_hist <- ggplot(chla_2009_sites, aes(x = mean_annual_chla)) +
+( dhw_hist <- ggplot(dhw_2009_sites, aes(x = mean_max_dhw_sum)) +
   geom_histogram(bins = 20) +
   labs(
-    x = expression("Mean annual chlorophyll-a (mg m"^{-3}*")"),
+    x = expression("Mean dhw sum"),
     y = "Frequency"
   ) +
   theme_bw() )
 
-# Boxcox 
-boxcox(lm(mean_annual_chla ~ 1, data = chla_2009_sites),
-       lambda = seq(-2, 2, 0.1))
-
 ```
 
-Outputs: - 62 sites - Right-skewed distribution: mean \> median and upper tail extends to 3.24 (which is then \~4x median). - The boxcox suggests log-transformation
+Keep zeros... maybe don't transform jsut yet...
 
 ## Exploratory Plot
 
 ```{r}
-#| label: biomass-vs-chla-plot
+#| label: biomass-vs-dhw-plot
 
 # Graph the data - X-Y scatter plot
-biomass_chla_fig1 <- merge(x = biomass_per_site_laura, y = chla_2009_sites, by = "site", all = TRUE) %>% 
-  ggplot(aes(x=mean_annual_chla, y=mean_biomass)) + 
+biomass_dhw_fig1 <- merge(x = biomass_per_site, y = dhw_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_dhw_sum, y=mean_biomass)) + 
   geom_point() +
   geom_smooth(method=lm)
 
-biomass_chla_fig1
+biomass_dhw_fig1
 
 # Correlation
-with(merge(x = biomass_per_site, y = chla_2009_sites, by = "site", all = TRUE),
-    cor(mean_annual_chla, mean_biomass))
+with(merge(x = biomass_per_site, y = dhw_2009_sites, by = "site", all = TRUE),
+    cor(mean_dhw_sum, mean_biomass))
 
 ```
 
@@ -214,32 +205,32 @@ Chlorophyll a and biomass seem to be weakly positively related, with a correlati
 Note that chlorophyll-a, as a continuous predictors, was mean-centred prior to analysis to improve interpretability of model parameters. Centering ensures that the intercept represents the expected response at the average value of the predictor, rather than at zero, which would be biologically unrealistic.
 
 ```{r}
-#| label: biomass-vs-chla-lm
+#| label: biomass-vs-dhw-lm
 
 # Merge needed data
-chla_model_data <- merge(x = biomass_per_site_laura, y = chla_2009_sites, by = "site", all = TRUE)
+dhw_model_data <- merge(x = biomass_per_site, y = dhw_2009_sites, by = "site", all = TRUE)
 
-# Centre chla
-chla_model_data$mean_chla_centred <- as.numeric(scale(
-  chla_model_data$mean_annual_chla,
+# Centre dhw
+dhw_model_data$mean_dhw_centred <- as.numeric(scale(
+  dhw_model_data$mean_dhw_sum,
   center = TRUE,
   scale = FALSE
 ))
 
 # Build lm 
-lm_biomass_chla <- lm(mean_biomass~mean_chla_centred,data = chla_model_data) 
+lm_biomass_dhw <- lm(mean_biomass~mean_dhw_centred,data = dhw_model_data) 
 ```
 
 Analyse model:
 
 ```{r}
 # Analyse the model 
-coef(lm_biomass_chla)
-#residuals(lm_biomass_chla)
-summary(lm_biomass_chla) 
-# or arm::display(lm_biomass_chla)
+coef(lm_biomass_dhw)
+#residuals(lm_biomass_dhw)
+summary(lm_biomass_dhw) 
+# or arm::display(lm_biomass_dhw)
 
-confint(lm_biomass_chla) 
+confint(lm_biomass_dhw) 
 
 ```
 
@@ -261,7 +252,7 @@ Checking model assumptions and violations:
 
 ```{r}
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot( lm_biomass_chla, which= c(1:4))
+plot( lm_biomass_dhw, which= c(1:4))
 
 ```
 
@@ -278,11 +269,11 @@ We also check how the distribution of the data changes after each transformation
 ```{r}
 
 # Transforming variables
-chla_model_data$log_biomass <- log10(chla_model_data$mean_biomass)
-chla_model_data$log_chla <- log10(chla_model_data$mean_annual_chla)
+dhw_model_data$log_biomass <- log10(dhw_model_data$mean_biomass)
+dhw_model_data$log_dhw <- log10(dhw_model_data$mean_dhw_sum)
 
 # Check transformations 
-( log_biomass_hist <- ggplot(chla_model_data, aes(x = log_biomass)) +
+( log_biomass_hist <- ggplot(dhw_model_data, aes(x = log_biomass)) +
   geom_histogram(bins = 20) +
   labs(
     x = expression("Log-Transformed Biomass"),
@@ -290,54 +281,54 @@ chla_model_data$log_chla <- log10(chla_model_data$mean_annual_chla)
   ) +
   theme_bw() )
 
-( log_chla_hist <- ggplot(chla_model_data, aes(x = log_chla)) +
-  geom_histogram(bins = 20) +
-  labs(
-    x = expression("Log-Transformed Chlorophyll-a"),
-    y = "Frequency"
-  ) +
-  theme_bw() )
+# ( log_dhw_hist <- ggplot(dhw_model_data, aes(x = log_dhw)) +
+#   geom_histogram(bins = 20) +
+#   labs(
+#     x = expression("Log-Transformed Chlorophyll-a"),
+#     y = "Frequency"
+#   ) +
+#   theme_bw() )
 ```
 
 The data is now looking much more normal!! Great :)
 
-We can now fit models with the transformed data. Ensure you are also centering the log_chla!
+We can now fit models with the transformed data. Ensure you are also centering the log_dhw!
 
 ```{r}
 
-# Centre logged chla
-chla_model_data$log_chla_centred <- as.numeric(
-  scale(chla_model_data$log_chla, center = TRUE, scale = FALSE)
-)
+# # Centre logged dhw
+# dhw_model_data$log_dhw_centred <- as.numeric(
+#   scale(dhw_model_data$log_dhw, center = TRUE, scale = FALSE)
+# )
 
 
 # Transformed models 
-log_biomass_chla <- lm(log_biomass~mean_chla_centred,data = chla_model_data) 
-biomass_log_chla <- lm(mean_biomass~log_chla_centred,data = chla_model_data) 
-log_biomass_log_chla <- lm(log_biomass~log_chla_centred,data = chla_model_data) 
+log_biomass_dhw <- lm(log_biomass~mean_dhw_centred,data = dhw_model_data) 
+# biomass_log_dhw <- lm(mean_biomass~log_dhw_centred,data = dhw_model_data) 
+# log_biomass_log_dhw <- lm(log_biomass~log_dhw_centred,data = dhw_model_data) 
 
 # Summaries of transformed models
-summary(log_biomass_chla) 
-summary(biomass_log_chla) 
-summary(log_biomass_log_chla) 
+summary(log_biomass_dhw) 
+# summary(biomass_log_dhw) 
+# summary(log_biomass_log_dhw) 
 
-# or arm::display(lm_biomass_chla)
+# or arm::display(lm_biomass_dhw)
 #
 ```
 
 The pattern is very consistent: none of the simple bivariate models show evidence of a relationship between chlorophyll and biomass.
 
-First model: log_biomass \~ mean_annual_chla
+First model: log_biomass \~ mean_annual_dhw
 
 The slope is −0.016 (p = 0.79), with R² ≈ 0.001. This indicates essentially no relationship between raw chlorophyll and log-transformed biomass. Chlorophyll explains virtually none of the variation in log biomass.
 
-Second model: mean_biomass \~ log_chla_centred
+Second model: mean_biomass \~ log_dhw_centred
 
 The slope is 6,048 (p = 0.34), R² ≈ 0.015. This suggests that a one-unit increase in log10 chlorophyll (i.e., a tenfold increase in chlorophyll) would be associated with an increase of about 6,000 biomass units, but this effect is not statistically supported (the confidence interval spans zero).
 
-Because log_chla is centred, the intercept (21,397) represents mean biomass at average log chlorophyll. That makes the intercept interpretable, but it does not change inference.
+Because log_dhw is centred, the intercept (21,397) represents mean biomass at average log chlorophyll. That makes the intercept interpretable, but it does not change inference.
 
-Third model: log_biomass \~ log_chla_centred (log–log model)
+Third model: log_biomass \~ log_dhw_centred (log–log model)
 
 The slope is −0.007 (p = 0.95), R² ≈ 0.00006. This is effectively zero. In scaling terms, the estimated exponent is essentially zero, meaning biomass does not scale with chlorophyll in a simple global power-law relationship.
 
@@ -345,27 +336,27 @@ The slope is −0.007 (p = 0.95), R² ≈ 0.00006. This is effectively zero. In 
 
 ```{r}
 
-# biomass_log_chla
+# biomass_log_dhw
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(biomass_log_chla, which= c(1:4))
+plot(biomass_log_dhw, which= c(1:4))
 
-# log_biomass_chla
+# log_biomass_dhw
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(log_biomass_chla, which= c(1:4))
+plot(log_biomass_dhw, which= c(1:4))
 
-# log_biomass_log_chla
+# log_biomass_log_dhw
 par(mfrow= c(2,2)) # divide the page into 2 x 2 frame
-plot(log_biomass_log_chla, which= c(1:4))
+plot(log_biomass_log_dhw, which= c(1:4))
 ```
 
 Even though neither model shows a significant slope, the log–log form better satisfies linear model assumptions slightly, as it reduces The residuals look the best for the log_log model, with the assumptions now satisfied -\> The log-transformed predictor slightly improves linearity.
 
 ### Check AICs
 
-Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_chla or log-log - provides the best fit
+Note that you cannot compare AIC across different response scales, so, given that log-biomass better fits the residuals, we are interested to know which model - log_biomass_dhw or log-log - provides the best fit
 
 ```{r}
-models <- list(log_biomass_chla, log_biomass_log_chla)
+models <- list(log_biomass_dhw, log_biomass_log_dhw)
 aictab(models)
 ```
 
@@ -389,7 +380,7 @@ We will first separate this into each different eco-region (country for now)
 
 ```{r}
 # plot of biomass vs chlorophyll for a 'no pooling analysis'
-( separate_lm_plot <- ggplot(chla_model_data, aes(x = log_chla_centred,
+( separate_lm_plot <- ggplot(dhw_model_data, aes(x = log_dhw_centred,
            y = log_biomass)) + geom_point() + geom_smooth(method = "lm", formula = y ~ x) +
   facet_grid(. ~ country) + theme_bw() + labs( x = "Chlorophyll a",
     y = "Log-Biomass", title = "No pooling analysis") )
@@ -406,8 +397,8 @@ At the other extreme, we could simply pool all the data together in a single sim
 
 ```{r}
 # Graph the data - X-Y scatter plot
-combined_lm_plot <- chla_model_data %>% 
-  ggplot(aes(x=log_chla_centred, y=log_biomass)) + 
+combined_lm_plot <- dhw_model_data %>% 
+  ggplot(aes(x=log_dhw_centred, y=log_biomass)) + 
   geom_point() +
   geom_smooth(method=lm)
 
@@ -418,7 +409,7 @@ This model helps us to understand the analysis we want to build from these initi
 
 ### Country as a fixed effect
 
-Note: - from above, we will carry on with the log_log model - we centre chla. In models including interactions, centering also makes main effects interpretable as effects evaluated at the mean of the interacting variable and can improve numerical stability in mixed-effects models. - We used sum-to-zero contrasts (effect coding) for country so that parameter estimates represent deviations from the overall mean rather than differences relative to an arbitrarily chosen reference country. Under effect coding, the intercept corresponds to the grand mean of the response (averaged across all observations), and each country coefficient represents that country’s deviation from this grand mean. In other words, coefficients quantify how much higher or lower a given country’s mean is compared to the overall mean.
+Note: - from above, we will carry on with the log_log model - we centre dhw. In models including interactions, centering also makes main effects interpretable as effects evaluated at the mean of the interacting variable and can improve numerical stability in mixed-effects models. - We used sum-to-zero contrasts (effect coding) for country so that parameter estimates represent deviations from the overall mean rather than differences relative to an arbitrarily chosen reference country. Under effect coding, the intercept corresponds to the grand mean of the response (averaged across all observations), and each country coefficient represents that country’s deviation from this grand mean. In other words, coefficients quantify how much higher or lower a given country’s mean is compared to the overall mean.
 
 #### Additive model
 
@@ -426,11 +417,11 @@ First we add it in an additive simple least squares regression. This additive mo
 
 ```{r}
 # Set sum-to-zero contrasts for country (the grand mean is the baseline - not an arbitrary country level)
-contrasts(chla_model_data$country) <- contr.sum(length(levels(chla_model_data$country)))
+contrasts(dhw_model_data$country) <- contr.sum(length(levels(dhw_model_data$country)))
 
 
-chla_country_additive <- lm(log_biomass ~ log_chla_centred + country, data = chla_model_data)
-summary(chla_country_additive) 
+dhw_country_additive <- lm(log_biomass ~ log_dhw_centred + country, data = dhw_model_data)
+summary(dhw_country_additive) 
 ```
 
 Output interpretation:
@@ -454,11 +445,11 @@ This interaction model allows the biomass–chlorophyll slope to differ among co
 ```{r}
 
 # Log-log interaction
-chla_country_interaction <- lm(log_biomass ~ log_chla_centred * country,
-  data = chla_model_data)
-summary(chla_country_interaction)
+dhw_country_interaction <- lm(log_biomass ~ log_dhw_centred * country,
+  data = dhw_model_data)
+summary(dhw_country_interaction)
 
-anova(chla_country_interaction)
+anova(dhw_country_interaction)
 
 ```
 
@@ -480,11 +471,11 @@ ANOVa - ancova...
 
 ```{r}
 #AIC
-interaction_test_models <- list(log_biomass_log_chla, chla_country_additive, chla_country_interaction)
+interaction_test_models <- list(log_biomass_log_dhw, dhw_country_additive, dhw_country_interaction)
 aictab(interaction_test_models) 
 
 # Classical F-test
-anova(log_biomass_log_chla, chla_country_additive, chla_country_interaction)
+anova(log_biomass_log_dhw, dhw_country_additive, dhw_country_interaction)
 ```
 
 The three models represent increasing structural complexity: a global log–log relationship only, an additive model including country-level differences in mean biomass, and a full interaction model allowing country-specific slopes.
@@ -506,9 +497,9 @@ Randome slopes only: This removes the intercept variance parameter, avoiding the
 ```{r}
 
 # Random slope only model
-lmer(log_biomass ~ log_chla_centred + 
-       (0 + log_chla_centred | country),
-     data = chla_model_data)
+lmer(log_biomass ~ log_dhw_centred + 
+       (0 + log_dhw_centred | country),
+     data = dhw_model_data)
 
 ```
 
@@ -525,8 +516,8 @@ Random intercept only model: This tests whether there is overall between-country
 ```{r}
 
 # Random intercept only model
-lmer(log_biomass ~ log_chla_centred + (1 | country),
-     data = chla_model_data)
+lmer(log_biomass ~ log_dhw_centred + (1 | country),
+     data = dhw_model_data)
 ```
 
 this random-intercept-only model is statistically stable and easier to interpret than the random-slope formulation.
@@ -548,14 +539,51 @@ Given that biomass is positive and right-skewed, we additionally fitted generali
 First we begin with an additive model:
 
 ```{r}
+# Gaussian
+glm_biomass_dhw_gaussian <- glm(
+  mean_biomass ~ mean_dhw_centred,
+  family = gaussian(link = "identity"),
+  data = dhw_model_data
+)
+
+summary(glm_biomass_dhw_gaussian)
+
+# GLM
+glm_biomass_dhw_gamma <- glm(
+  mean_biomass ~ mean_dhw_centred,
+  family = Gamma(link = "log"),
+  data = dhw_model_data
+)
+
+summary(glm_biomass_dhw_gamma)
+
+
+```
+
+```{r}
+models <- list(glm_biomass_dhw_gaussian, glm_biomass_dhw_gamma)
+aictab(models)
+```
+
+```{r}
+
 # Additive
 glm_gamma_additive <- glm(
-  mean_biomass ~ log_chla_centred + country,
+  mean_biomass ~ mean_dhw_centred + country,
   family = Gamma(link = "log"),
-  data = chla_model_data
+  data = dhw_model_data
 )
 
 summary(glm_gamma_additive)
+
+# Interaction
+glm_gamma_interaction <- glm(
+  mean_biomass ~ mean_dhw_centred*country,
+  family = Gamma(link = "log"),
+  data = dhw_model_data
+)
+
+summary(glm_gamma_interaction)
 ```
 
 Note that the Gamma GLM results closely mirror your Gaussian log–log results in terms of structure.
@@ -574,9 +602,9 @@ Then we try the interaction, multiplicative model:
 
 ```{r}
 glm_gamma_interaction <- glm(
-  mean_biomass ~ log_chla_centred * country,
+  mean_biomass ~ log_dhw_centred * country,
   family = Gamma(link = "log"),
-  data = chla_model_data
+  data = dhw_model_data
 )
 
 summary(glm_gamma_interaction)
@@ -589,7 +617,7 @@ plot(glm_gamma_interaction)
 ```
 
 ```{r}
-glm_test_models <- list(glm_gamma_additive, glm_gamma_interaction)
+glm_test_models <- list(glm_biomass_dhw_gaussian, glm_biomass_dhw_gamma, glm_gamma_additive, glm_gamma_interaction)
 aictab(glm_test_models)
 ```
 
@@ -597,4 +625,166 @@ The interaction Gamma model has substantially lower AICc (ΔAICc = 5.84) and car
 
 Given that the linear model is simpler I will keep this :)
 
+### Other groupings! ...
 
+```{r}
+dhw_gamma2 <- glm(mean_biomass ~ mean_annual_dhw + location, data = dhw_model_data,
+                  family = Gamma(link = "log"))
+
+summary(dhw_gamma2)
+(AIC_location <- AIC(dhw_gamma2))
+(AICc_location <- AICc(dhw_gamma2))
+```
+
+```{r}
+AIC(dhw_gamma, dhw_gamma2)
+AICc(dhw_gamma, dhw_gamma2)
+
+```
+
+##### Plot
+
+```{r}
+#| label: biomass-vs-sst-plot
+
+# Graph the data - X-Y scatterplot
+biomass_sst_fig1 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_sst, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_sst_fig1
+
+
+biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_annual_sst, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_sst_fig2
+```
+
+##log
+
+```{r}
+#| label: biomass-vs-sst-plot
+
+# Graph the data - X-Y scatterplot
+biomass_sst_fig2 <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_annual_sst, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_sst_fig2
+```
+
+```{r}
+par(mfrow= c(1,2)) # divide the page into 1 x 2 frame
+plot( lm_biomass_dhw, which= c(1:2))
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-sst-lm
+
+# Merge needed data
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_sst <- lm(mean_biomass~mean_annual_sst,data = sst_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_sst) 
+```
+
+## Log
+
+```{r}
+
+# Merge needed data
+sst_x_and_y_site <- merge(x = biomass_per_site, y = sst_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_sst <- lm(log(mean_biomass)~mean_annual_sst,data = sst_x_and_y_site) 
+
+# Analyse the model 
+summary(lm_biomass_sst)
+
+
+library(lme4)
+
+model_sst <- lmer(
+  log(mean_biomass) ~ mean_annual_sst + (1 | country),
+  data = merge(biomass_per_site, sst_2009_sites, by = "site")
+)
+
+summary(model_sst)
+```
+
+## Comparing differnet SST metrics
+
+# Biomass vs Connectivity
+
+## Plot
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig1 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=mean_biomass)) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig1
+
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+ggplot(aes(mean_gravity, log(mean_biomass), colour = country)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = lm, se = FALSE)
+biomass_gravity_fig2
+```
+
+## log
+
+```{r}
+#| label: biomass-vs-gravity-plot
+
+# Graph the data - X-Y scatterplot
+biomass_gravity_fig2 <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE) %>% 
+  ggplot(aes(x=mean_gravity, y=log(mean_biomass))) + 
+  geom_point() +
+  geom_smooth(method=lm) 
+
+biomass_gravity_fig2
+```
+
+##### Model
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(mean_biomass~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```
+
+### Log
+
+```{r}
+#| label: biomass-vs-gravity-lm
+
+# Merge needed data
+gravity_x_and_y_site <- merge(x = biomass_per_site, y = h_gravity_2009_sites, by = "site", all = TRUE)
+
+# Build lm 
+lm_biomass_gravity <- lm(log(mean_biomass)~mean_gravity,data = gravity_x_and_y_site) 
+# Analyse the model 
+summary(lm_biomass_gravity) 
+
+```

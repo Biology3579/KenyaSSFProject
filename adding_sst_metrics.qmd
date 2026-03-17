@@ -126,6 +126,7 @@ raw_dhw_2009 <- readr::read_rds(here::here("raw_data","raw_dhw_2009.rds"))
 
 ```
 
+This calculates the sum of dhw across the whole year. While this might be useful, we kind of want a better metric 
 ```{r}
 
 for (i in 1:length(locations_with_dhw_sat_2009$site)){
@@ -150,8 +151,32 @@ for (i in 1:length(locations_with_dhw_sat_2009$site)){
 }
 ```
 
+As such, we will take the maximum value in the year. This will then tell us ... which we can then split into categories :)
 ```{r}
-readr::write_rds(locations_with_dhw_sat_2009,here::here("processed_data","locations_with_dhw_2009"))
+for (i in 1:nrow(locations_with_dhw_sat_2009)) {
+  
+  end_date <- locations_with_dhw_sat_2009$date[i]
+  start_date <- end_date - days(364)
+  
+  closest_cell_lat <- locations_with_dhw_sat_2009$closest_cell_lat[i]
+  closest_cell_lon <- locations_with_dhw_sat_2009$closest_cell_lon[i]
+  
+  relevant_cells <- raw_dhw_2009 %>%
+    filter(
+      lat == closest_cell_lat,
+      lon == closest_cell_lon,
+      date >= start_date,
+      date <= end_date
+    )
+  
+  locations_with_dhw_sat_2009$max_dhw[i] <- 
+    max(relevant_cells$degree_heating_week, na.rm = TRUE)
+}
+```
+
+
+```{r}
+readr::write_rds(locations_with_dhw_sat_2009,here::here("processed_data","locations_with_dhw_2009.rds"))
 
 ```
 

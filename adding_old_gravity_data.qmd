@@ -201,21 +201,6 @@ library(sf)
 
 # Save csv
 write.csv(locations_with_gravity , here::here("processed_data", "locations_with_gravity.csv"))
-
-
-# Export summaries
-# write.csv(country_summary, 
-#         "gravity_summary_by_country.csv", 
-#          row.names = FALSE)
-
-# write.csv(location_summary, 
-#          "gravity_summary_by_location.csv", 
-#          row.rows = FALSE)
-
-# Save as spatial file if needed for GIS
-# st_write(sites_with_gravity, 
-#          "sites_with_gravity.shp", 
-#         delete_dsn = TRUE)  # Overwrite if exists
 ```
 
 ## 2018 dataset

@@ -1,4 +1,9 @@
 ---
+title: "pisc_model_testing"
+format: html
+editor: visual
+---
+---
 title: "tot_biomass_model_testing"
 format: html
 editor: visual
@@ -63,32 +68,23 @@ dhw_2009 <- readr::read_rds(here::here("processed_data", "locations_with_dhw_200
 rugosity_2009 <- readr::read_rds(here::here("processed_data", "clean_dive_details_2009.rds"))
 ```
 
-# Total Biomass
+# Piscivore biomass
 
-This refers to an aggregate of all species.
+Including zeros:
 
 ```{r}
-#| label: calculate-total-data
-
-# Aggregate biomass at transect level
-transect_biomass <- fish_2009 %>%
+piscivore_data <- fish_2009 %>%
   group_by(site, station, ts_no, date) %>%
   summarise(
-    transect_biomass = sum(tot_wt_g, na.rm = TRUE),
+    transect_pisc_biomass = sum(
+      ifelse(trophic_group == "piscivores", tot_wt_g, 0),
+      na.rm = TRUE
+    ),
     country = first(country),
     .groups = "drop"
-  )
-
-# Check n. transects per site
-table(transect_biomass$site)
-
-
-# Drop kenya and sites with fewer tahn 2 ts
-transect_biomass$country <- as.character(transect_biomass$country)
-
-ts_biomass_data <- transect_biomass %>%
+  ) %>%
   group_by(site) %>%
-  filter(n() >= 3) %>%   #drop sites
+  filter(n() >= 3) %>%
   ungroup() %>%
   filter(
     country != "kenya",
@@ -98,69 +94,34 @@ ts_biomass_data <- transect_biomass %>%
     country = as.factor(country),
     site = as.factor(site)
   )
-
 ```
 
-
-### Check the structure of biomass data
-
 ```{r}
-# Overview of the data
-summary(ts_biomass_data)
-summary(ts_biomass_data %>% count(site) %>% pull(n))
+summary(piscivore_data)
 
+zeros <- mean(piscivore_data$transect_pisc_biomass == 0, na.rm = TRUE)
+cat("Proportion of zeros:", zeros, "\n")
 
-# Histogram 
-( biomass_hist <- ggplot(ts_biomass_data, aes(x = transect_biomass)) +
-  geom_histogram(binwidth = 5310) +
+( pisc_hist <- ggplot(piscivore_data, aes(x = transect_pisc_biomass)) +
+  geom_histogram(bins = 50) +
   labs(
-    x = expression("Total biomass in a transect"),
+    x = "Piscivore biomass per transect",
     y = "Frequency"
   ) +
   theme_bw() )
-
-# Boxcox 
-boxcox(lm(transect_biomass ~ 1, data = ts_biomass_data),
-       lambda = seq(-2, 2, 0.1))
 ```
-## Checking for country vs year effects
-```{r}
 
-# Extract year variable:
-library(lubridate)
-ts_biomass_data$year <- year(ts_biomass_data$date)
 
-# check country and year 
-table(ts_biomass_data$country, ts_biomass_data$year)
-```
-Cannot distinguish between country and year, so we just keep country model.
-
-## Country model
-
-Simple lmm:
-```{r}
-# Build lm 
-lmm_biomass_country <- lmer(transect_biomass ~  country + (1 | site), data = ts_biomass_data)
-summary(lmm_biomass_country)
-```
-About 30% of the variance is between sites, and 70% within sites (between transects).
-Interpretation:
-Sites matter → good that you included (1 | site)
-But there is still substantial within-site variability → another reason not to aggregate to site means.
-Country does not have to have a huge explanatory effect in this model.
-
-But also we should transform our data...
-
-We can see what the data looks like after log-transformation:
+log-transformation:
 
 ```{r}
-ts_biomass_data <- ts_biomass_data %>%
+piscivore_data <- piscivore_data %>%
   mutate(
-    log_biomass = log(transect_biomass),
-    sqrt_biomass = sqrt(transect_biomass))
+    log_pisc_biomass = log(transect_pisc_biomass + 0.01),
+    sqrt_pisc_biomass = sqrt(transect_pisc_biomass + 0.01))
 
 
-(log_biomass_hist <-ggplot(ts_biomass_data, aes(x = log_biomass)) +
+(log_biomass_hist <-ggplot(piscivore_data, aes(x = log_pisc_biomass)) +
   geom_histogram(bins = 30) +
   labs(
     x = "Log-transformed biomass",
@@ -168,7 +129,7 @@ ts_biomass_data <- ts_biomass_data %>%
   ) +
   theme_bw() )
 
-(sqrt_biomass_hist <-ggplot(ts_biomass_data, aes(x = sqrt_biomass)) +
+(sqrt_biomass_hist <-ggplot(piscivore_data, aes(x = sqrt_pisc_biomass)) +
   geom_histogram(bins = 30) +
   labs(
     x = "Sqrt-transformed biomass",
@@ -177,59 +138,6 @@ ts_biomass_data <- ts_biomass_data %>%
   theme_bw() )
 ```
 Despite having a few outliers, the log transform is better here.
-
-```{r}
-# Country model
-lmm_log_biomass_country <- lmer(log_biomass ~  country + (1 | site), data = ts_biomass_data)
-summary(lmm_log_biomass_country)
-```
-So again, we see that country is not a huge explanatory variable.
-
-```{r}
-plot(lmm_log_biomass_country)
-qqnorm(resid(lmm_log_biomass_country))
-```
-
-
-Try Gaussian vs Gamma GLMM.
-```{r}
-
-# Country model
-country_gaus_glmm <- glmer(
-  transect_biomass ~ country + (1 | site),
-  family = gaussian(link = "log"),
-  data = ts_biomass_data
-)
-summary(country_gaus_glmm)
-
-# Country model
-country_gamma_glmm <- glmer(transect_biomass ~ country + (1 | site),
-  family = Gamma(link = "log"),
-  data = ts_biomass_data
-)
-summary(country_gamma_glmm)
-```
-```{r}
-
-# simulate residuals
-res_country_gaus <- simulateResiduals(country_gaus_glmm)
-
-# basic diagnostic plots
-plot(res_country_gaus)
-
-# simulate residuals
-res_country_gamma <- simulateResiduals(country_gamma_glmm)
-
-# basic diagnostic plots
-plot(res_country_gamma)
-```
-```{r}
-country_models <- list(country_gaus_glmm, country_gamma_glmm)
-aictab(country_models)
-
-anova(country_gaus_glmm, country_gamma_glmm)
-```
-
 
 ### Calculate gravity means per site
 
@@ -262,7 +170,7 @@ gravity_metrics_2009 <- gravity_2009_sites %>%
   left_join(old_grav_2009_sites, by = "site")
 
 # Model data:
-grav_model_data <- ts_biomass_data %>%
+grav_model_data <- piscivore_data %>%
   left_join(gravity_metrics_2009, by = "site")
 ```
 
@@ -296,13 +204,106 @@ grav_model_data <- grav_model_data %>%
     log_settlement_tot_pop_sc = as.numeric(scale(log_settlement_tot_pop))
   )
 
+```
 
-mg_glmer <- glmer(transect_biomass ~ log_market_gravity_sc + (1|site),  family = Gamma(link = "log"),
+```{r}
+# Gaussian (we use glm so it's likelihood-based)
+pisc_glm_gaussian <- glmmTMB::glmmTMB(transect_pisc_biomass ~ log_nearest_pop_grav_sc + (1|site),
+                 family = gaussian(link = "identity"),
+                 data = grav_model_data)
+summary(pisc_glm_gaussian)
+
+# Gaussian (we use glm so it's likelihood-based)
+log_pisc_glm_gaussian <- glmmTMB::glmmTMB(log_pisc_biomass ~ log_nearest_pop_grav_sc + (1|site),
+                 family = gaussian(link = "identity"),
+                 data = grav_model_data)
+summary(log_pisc_glm_gaussian)
+```
+
+```{r}
+pisc_glm_tweedie <- glmmTMB::glmmTMB(transect_pisc_biomass ~ log_nearest_pop_grav_sc + (1|site),
+                 family = glmmTMB::tweedie(link = "log"),
+                 data = grav_model_data)
+summary(pisc_glm_tweedie)
+
+grav_model_data$nearest_pop_grav_sc <- scale(grav_model_data$nearest_pop_grav)
+
+pisc_glm_tweedie_2 <- glmmTMB::glmmTMB(transect_pisc_biomass ~ nearest_pop_grav_sc + (1|site),
+                 family = glmmTMB::tweedie(link = "log"),
+                 data = grav_model_data)
+summary(pisc_glm_tweedie_2)
+```
+
+```{r}
+library(splines)
+
+pisc_glm_tweedie_splin <- glmmTMB::glmmTMB(
+  transect_pisc_biomass ~ ns(log_nearest_pop_grav_sc, df = 3) + (1|site),
+  family = glmmTMB::tweedie(link = "log"),
+  data = grav_model_data
+)
+summary(pisc_glm_tweedie_splin)
+```
+```{r}
+library(mgcv)
+
+grav_model_data$site <- factor(grav_model_data$site)
+
+gam_model <- gam(
+  transect_pisc_biomass ~ s(log_nearest_pop_grav_sc, k = 3) + s(site, bs = "re"),
+  family = tw(link = "log"),
+  method = "REML",
+  data = grav_model_data
+)
+
+summary(gam_model)
+```
+
+```{r}
+plot(gam_model, pages = 1)
+plot(gam_model, pages = 1, shade = TRUE)
+
+plot(gam_model, select = 1, shade = TRUE)
+
+plot(log(transect_pisc_biomass + 1) ~ log_nearest_pop_grav_sc, data=grav_model_data)
+
+remove.packages("dplyr")
+install.packages("dplyr")
+install.packages("gratia")
+
+```
+
+
+
+
+
+```{r}
+library(DHARMa)
+
+# Gaussian model
+res_gaussian <- simulateResiduals(log_pisc_glm_gaussian, n = 1000)
+
+# Tweedie model
+res_tweedie <- simulateResiduals(pisc_glm_tweedie, n = 1000)
+res_tweedie_2 <- simulateResiduals(pisc_glm_tweedie_2, n = 1000)
+
+
+plot(res_gaussian)
+plot(res_tweedie)
+plot(res_tweedie_2)
+```
+
+Hmmm it seems a little bit non-linear but maybe the tweedie model is ok?
+
+
+
+```{r}
+mg_glmer <- glmer(transect_pisc_biomass ~ log_market_gravity_sc + (1|site),  family = Gamma(link = "log"),
   data = grav_model_data)
 
 summary(mg_glmer)
 
-mg_glmer2 <- glmer(transect_biomass ~ log_market_gravity_sc + (1|site),  family = gaussian(link = "log"),
+mg_glmer2 <- glmer(transect_pisc_biomass ~ log_market_gravity_sc + (1|site),  family = gaussian(link = "log"),
   data = grav_model_data)
 
 summary(mg_glmer2)
@@ -338,7 +339,7 @@ ggplot(grav_model_data, aes(x = log_nearest_pop_grav_sc, y = transect_biomass)) 
   )
 ```
 
-#Chlorophyll a 
+# Chlorophyll a 
 
 ```{r}
 # Calculate mean chlorophyll per site
@@ -714,4 +715,3 @@ aictab(list(m0, m1, m2, m3, m4, m5, m6))
 
 
 ```
-

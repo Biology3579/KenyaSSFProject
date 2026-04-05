@@ -89,9 +89,7 @@ sst_data_list_2009 <- lapply(sst_filenames_2009, function(f) {
 })
 
 # Combine into a single data table
-raw_sst_2009 <- data.table::rbindlist(sst_data_list_2009, use.names = TRUE, fill = TRUE)
-
-raw_sst_2009 <- raw_sst_2009 %>% filter(!is.na(sst))
+raw_sst_2009 <- data.table::rbindlist(sst_data_list_2009, use.names = TRUE, fill = TRUE) %>% filter(!is.na(sst))
 
 message(sprintf("Processing complete. Total rows extracted: %d", nrow(raw_sst_2009)))
 ```
@@ -159,6 +157,7 @@ fwrite(locations_with_sst_2009 , here::here("processed_data", "locations_with_ss
 ```
 
 ## Quality checks 2009
+
 #### Notes on Data Quality
 
 **Important considerations:**

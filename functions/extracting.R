@@ -102,65 +102,79 @@ extract_sat_data <- function(filepath,
 
 ## A function that assigns to each station, the nearest satellite cell (store lat/lon and distance to cell) ----
 assign_nearest_cell <- function(raw_sat_data, clean_locations){
-
+  
   unique_cells <- raw_sat_data %>% distinct(lat, lon)
   
-  # convert to sf (assumes columns as specified)
-  stations_as_sf  <- st_as_sf(clean_locations, coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
-  unique_cells_as_sf  <- st_as_sf(unique_cells, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+  # convert to sf
+  stations_as_sf     <- st_as_sf(clean_locations, coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+  unique_cells_as_sf <- st_as_sf(unique_cells, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
   
-  # find index of nearest feature in first_sf for each point in clean_sf
+  # find nearest cell for each station
   nearest_indices <- st_nearest_feature(stations_as_sf, unique_cells_as_sf)
-  # nearest_idx[i] is the row index in first_sf closest to clean_sf[i,]
   
-  # extract corresponding lat/lon
   clean_locations$closest_cell_lat <- unique_cells$lat[nearest_indices]
   clean_locations$closest_cell_lon <- unique_cells$lon[nearest_indices]
   
-  # compute accurate geodetic distances (in meters) for those pairs
-  # st_distance on geographic coordinates uses s2/geodetic when available; specify by_element=TRUE
   dists <- st_distance(stations_as_sf, unique_cells_as_sf[nearest_indices,], by_element = TRUE)
-  
-  # convert to numeric (in meters)
-  stations_as_sf$cell_distance_km <- as.numeric(dists) / 1000
-  
-  # put back into the original dataframe if needed
-  clean_locations$closest_cell   <- stations_as_sf$closest_cell
-  clean_locations$cell_distance_km  <- stations_as_sf$cell_distance_km
+  clean_locations$cell_distance_km <- as.numeric(dists) / 1000
   
   clean_locations
-  
 }
 
 
 ## A function to compute the annual mean ----
 
 compute_annual_mean <- function(clean_locations, raw_sat_data, metric_name, metric_annual_mean){
-  for (i in 1:length(clean_locations$station)){
-    #get month and year and id
-    date <- clean_locations$date[i]
-    closest_cell_lat = clean_locations$closest_cell_lat[i]
-    closest_cell_lon = clean_locations$closest_cell_lon[i]
+  for (i in 1:nrow(clean_locations)){
     
-    # start = first day of the month 11 months before the reference month
-    start_month <- floor_date(date, "month") %m-% months(11)
+    ref_date         <- clean_locations$date[i]
+    closest_cell_lat <- clean_locations$closest_cell_lat[i]
+    closest_cell_lon <- clean_locations$closest_cell_lon[i]
     
-    # end = last day of the reference month
-    end_month <- ceiling_date(date, "month") - days(1)
-
+    start_month <- floor_date(ref_date, "month") %m-% months(11)
+    end_month   <- ceiling_date(ref_date, "month") - days(1)
+    
     relevant_cells <- raw_sat_data %>%
       filter(
         lat == closest_cell_lat,
         lon == closest_cell_lon,
-        date >= start_month,
-        date <= end_month
-      ) 
+        .data$date >= start_month,
+        .data$date <= end_month
+      )
     
-    #find their chlorophyll average
-    mean <- mean(relevant_cells[[metric_name]])
-
-    #add it to the table
-    clean_locations[[metric_annual_mean]][i] = mean
+    # if no data in window, find nearest cell that has data
+    if (nrow(relevant_cells) == 0) {
+      
+      # get all cells that DO have data in the window
+      cells_with_data <- raw_sat_data %>%
+        filter(.data$date >= start_month, .data$date <= end_month) %>%
+        distinct(lat, lon)
+      
+      if (nrow(cells_with_data) > 0) {
+        # find which of those is geographically nearest to this station
+        station_sf    <- st_as_sf(clean_locations[i, ], coords = c("longitude", "latitude"), crs = 4326)
+        fallback_sf   <- st_as_sf(cells_with_data, coords = c("lon", "lat"), crs = 4326)
+        nearest_idx   <- st_nearest_feature(station_sf, fallback_sf)
+        
+        fallback_lat  <- cells_with_data$lat[nearest_idx]
+        fallback_lon  <- cells_with_data$lon[nearest_idx]
+        
+        relevant_cells <- raw_sat_data %>%
+          filter(
+            lat == fallback_lat,
+            lon == fallback_lon,
+            .data$date >= start_month,
+            .data$date <= end_month
+          )
+        
+        message(sprintf(
+          "Station %s: no data at closest cell, fell back to nearest cell with data (%.4f, %.4f)",
+          clean_locations$station[i], fallback_lat, fallback_lon
+        ))
+      }
+    }
+    
+    clean_locations[[metric_annual_mean]][i] <- mean(relevant_cells[[metric_name]], na.rm = TRUE)
   }
   
   clean_locations

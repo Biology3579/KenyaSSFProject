@@ -344,8 +344,6 @@ scaled_predictors <- transformed_predictors %>%
 #  PREDICTOR CORRELATION MATRIX
 # ============================================================
 
-# note i am not sure =happy with the collours - it shoudl flag high values (not high or low -1 or 1 equivalently)
-
 corr_matrix <- scaled_predictors %>%
   dplyr::select(ends_with("_sc")) %>%
   rename(
@@ -358,7 +356,7 @@ corr_matrix <- scaled_predictors %>%
   ) %>%
   cor(use = "complete.obs")
 
-corrplot(corr_matrix,
+corrplot(abs(corr_matrix),
          method      = "square",
          type        = "lower",
          tl.col      = "black",
@@ -366,11 +364,13 @@ corrplot(corr_matrix,
          tl.offset   = 0.5,
          addCoef.col = "black",
          number.cex  = 0.8,
-         col         = colorRampPalette(c("#d73027", "white", "#4575b4"))(200),
+         col         = colorRampPalette(c("white", "#d73027"))(200),
+         is.corr     = FALSE,
          mar         = c(0, 0, 4, 2))
 
 # ── Decision guide ────────────────────────────────────────────
 # Need to choose between gravity metrics but keep the rest
+# Maybe beware of chla?
 
 # ============================================================
 #  CHOOSING SETTLEMENT METRIC
@@ -402,7 +402,7 @@ make_aicc_df(list(
 # robust to metric choice. Settlement gravity carried forward;
 # log_settlement_pop_sc dropped from all subsequent candidate models.
 
-rm(settlement_data) # remove lp_data - not used after this
+rm(settlement_data) # remove settlement_data - not used after this
 
 # ============================================================
 #  ANALYSIS DATASETS
@@ -697,7 +697,7 @@ ggplot(transect_model_data,
 
 # F1: Gaussian on log(y)
 mF1_gaussian <- glmmTMB(
-  log_total_biomass ~ sst_sc + log_chla_sc +
+  log_transect_biomass ~ sst_sc + log_chla_sc +
     log_market_gravity_sc + rugosity_sc + (1 | site),
   family = gaussian(),
   data   = transect_model_data
@@ -737,14 +737,14 @@ testOutliers(resF2)
 # Anchor: full market gravity model — same fixed effects across
 # all RE structures.
 
-re_t_null    <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc,
+re_t_null    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc,
                         family = gaussian(), data = transect_model_data)
 
-re_t_site    <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_t_site    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
                           (1 | site),
                         family = gaussian(), data = transect_model_data)
 
-re_t_nested  <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_t_nested  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
                           (1 | country/site),
                         family = gaussian(), data = transect_model_data)
 
@@ -760,17 +760,17 @@ print(make_aicc_df(re_comparison_t))
 # ── Candidate models ──────────────────────────────────────────
 # Family: Gaussian on log(y); random effect: (1 | site).
 
-m0             <- glmmTMB(log_total_biomass ~ 1                                                                         + (1 | site), family = gaussian(), data = transect_model_data)
-m_env          <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc                                                     + (1 | site), family = gaussian(), data = transect_model_data)
-m_market       <- glmmTMB(log_total_biomass ~ log_market_gravity_sc                                                    + (1 | site), family = gaussian(), data = transect_model_data)
-m_settgrav     <- glmmTMB(log_total_biomass ~ log_settlement_grav_sc                                                   + (1 | site), family = gaussian(), data = transect_model_data)
-m_hab          <- glmmTMB(log_total_biomass ~ rugosity_sc                                                              + (1 | site), family = gaussian(), data = transect_model_data)
-m_env_market   <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc                            + (1 | site), family = gaussian(), data = transect_model_data)
-m_env_settgrav <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc                           + (1 | site), family = gaussian(), data = transect_model_data)
-m_hab_market   <- glmmTMB(log_total_biomass ~ rugosity_sc + log_market_gravity_sc                                     + (1 | site), family = gaussian(), data = transect_model_data)
-m_hab_settgrav <- glmmTMB(log_total_biomass ~ rugosity_sc + log_settlement_grav_sc                                    + (1 | site), family = gaussian(), data = transect_model_data)
-m_full_market  <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc             + (1 | site), family = gaussian(), data = transect_model_data)
-m_full_settgrav <- glmmTMB(log_total_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc            + (1 | site), family = gaussian(), data = transect_model_data)
+m0             <- glmmTMB(log_transect_biomass ~ 1                                                                         + (1 | site), family = gaussian(), data = transect_model_data)
+m_env          <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc                                                     + (1 | site), family = gaussian(), data = transect_model_data)
+m_market       <- glmmTMB(log_transect_biomass ~ log_market_gravity_sc                                                    + (1 | site), family = gaussian(), data = transect_model_data)
+m_settgrav     <- glmmTMB(log_transect_biomass ~ log_settlement_grav_sc                                                   + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab          <- glmmTMB(log_transect_biomass ~ rugosity_sc                                                              + (1 | site), family = gaussian(), data = transect_model_data)
+m_env_market   <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc                            + (1 | site), family = gaussian(), data = transect_model_data)
+m_env_settgrav <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc                           + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab_market   <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_market_gravity_sc                                     + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab_settgrav <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_settlement_grav_sc                                    + (1 | site), family = gaussian(), data = transect_model_data)
+m_full_market  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc             + (1 | site), family = gaussian(), data = transect_model_data)
+m_full_settgrav <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc            + (1 | site), family = gaussian(), data = transect_model_data)
 
 model_list_transect <- list(
   "Null"                         = m0,
@@ -790,7 +790,7 @@ cat("\n--- AICc: Transect-level biomass ---\n")
 print(make_aicc_df(model_list_transect))
 
 # ── Diagnostics on best model ─────────────────────────────────
-res_t <- simulateResiduals(m_hab, n = 1000)   # update after AICc inspection
+res_t <- simulateResiduals(m_hab, n = 1000) 
 
 jpeg("dharma_transect_best.jpg", width = 25, height = 15, units = "cm", res = 300)
 plot(res_t, main = "DHARMa — transect-level biomass best model")
@@ -975,7 +975,7 @@ cat("\n--- AICc: count models ---\n")
 print(make_aicc_df(model_list_counts))
 
 # ── Diagnostics on best model ─────────────────────────────────
-res_cm <- simulateResiduals(cm_full_sett, n = 1000)   # update after AICc inspection
+res_cm <- simulateResiduals(cm_full_sett, n = 1000)
 
 jpeg("dharma_best_count_model.jpg", width = 25, height = 15, units = "cm", res = 300)
 plot(res_cm, main = "DHARMa — best count model"); dev.off()
@@ -1081,3 +1081,4 @@ cat("Part 3 counts  beta:", round(fixef(cm_full_sett)$cond["sst_sc"], 3),
 cat("Parts 1 & 2 biomass: not in best model\n")
 # Weak, non-significant positive trend — warmer sites may support
 # marginally higher abundance but effect is not robust.
+

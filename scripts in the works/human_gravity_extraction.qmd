@@ -26,7 +26,6 @@ library(rnaturalearthdata)
 options(scipen = 999) # keeps everything in readable (non-scientific) format
 ```
 
-
 # Make friction map
 
 ## Get land cover raster
@@ -413,7 +412,6 @@ locations_2015_with_city$market_grav = locations_2015_with_city$nearest_city_pop
 
 This is getting the sum of the population in a 50km radius
 
-
 ```{r}
 library(terra)
 library(sf)
@@ -476,7 +474,6 @@ locations_with_settlement_2015 <- calc_settlement_total_pop(
 )
 
 ```
-
 
 ```{r}
 
@@ -741,8 +738,6 @@ locations_with_grav_2015_final <- calc_settlement_grav(locations_with_all_2015)
 }
 
 ```
-
-
 
 ```{r}
 readr::write_rds(locations_with_grav_2010_final,here::here("city_data","locations_with_grav_2010_final.rds"))

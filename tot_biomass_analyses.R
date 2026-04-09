@@ -397,10 +397,12 @@ make_aicc_df(list(
   "Settlement gravity" = settgrav,
   "Settlement pop."    = settpop
 ))
-# Settlement gravity selected (AICc = 146.46 vs 146.93; delta = 0.46).
-# Near-equivalent performance (weights 0.56 vs 0.44) confirms results
-# robust to metric choice. Settlement gravity carried forward;
-# log_settlement_pop_sc dropped from all subsequent candidate models.
+# Settlement gravity marginally preferred (AICc delta = 0.73, weights 0.59 vs 0.41)
+# but performance is near-equivalent.
+#  Both metrics carried forward as
+# parallel candidate model sets — dropping settlement pop. at this stage
+# would be premature given the negligible difference in explanatory power.
+# Results compared across both metrics to assess robustness.
 
 rm(settlement_data) # remove settlement_data - not used after this
 
@@ -411,7 +413,7 @@ rm(settlement_data) # remove settlement_data - not used after this
 
 # Drop log_settlement_pop_sc now that settlement gravity is confirmed
 final_predictors <- scaled_predictors %>%
-  dplyr::select(site, log_market_gravity_sc, log_settlement_grav_sc,
+  dplyr::select(site, log_market_gravity_sc, log_settlement_grav_sc, log_settlement_pop_sc,
                 log_chla_sc, sst_sc, rugosity_sc)
 
 # ── Transect-level dataset  ─────────────────────
@@ -433,6 +435,7 @@ total_model_data <- transect_model_data %>%
     n_transects            = n(),
     log_market_gravity_sc  = first(log_market_gravity_sc),
     log_settlement_grav_sc = first(log_settlement_grav_sc),
+    log_settlement_pop_sc  = first(log_settlement_pop_sc),
     log_chla_sc            = first(log_chla_sc),
     sst_sc                 = first(sst_sc),
     rugosity_sc            = first(rugosity_sc),
@@ -452,7 +455,7 @@ cat("\nSite model data:", nrow(total_model_data), "sites,",
 
 # ── F1: Gaussian on raw mean biomass ─────────────────────────
 mS_F1 <- lm(mean_biomass ~ sst_sc + log_chla_sc +
-              log_market_gravity_sc + rugosity_sc,
+              log_settlement_grav_sc  + rugosity_sc,
             data = total_model_data)
 
 jpeg("diagnostics_site_F1_gaussian_raw.jpg",
@@ -466,7 +469,7 @@ par(mfrow = c(2, 2)); plot(mS_F1); par(mfrow = c(1, 1))
 
 # ── F2: Gaussian on log-transformed mean biomass ─────────────
 mS_F2 <- lm(log_mean_biomass ~ sst_sc + log_chla_sc +
-              log_market_gravity_sc + rugosity_sc,
+              log_settlement_grav_sc  + rugosity_sc,
             data = total_model_data)
 
 jpeg("diagnostics_site_F2_gaussian_log.jpg",
@@ -482,7 +485,7 @@ par(mfrow = c(2, 2)); plot(mS_F2); par(mfrow = c(1, 1))
 # Natural fit for continuous positive data; variance scales
 # with mean squared.
 mS_F3 <- glm(mean_biomass ~ sst_sc + log_chla_sc +
-               log_market_gravity_sc + rugosity_sc,
+               log_settlement_grav_sc  + rugosity_sc,
              family = Gamma(link = "log"),
              data   = total_model_data)
 
@@ -523,10 +526,10 @@ make_aicc_df(list(
 # ============================================================
 
 #glmmTMB structure for better comparisons
-re_null <- glmmTMB(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc,
+re_null <- glmmTMB(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc  + rugosity_sc,
                    family = gaussian(), data = total_model_data) 
 
-re_country <- glmmTMB(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_country <- glmmTMB(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc  + rugosity_sc +
                          (1 | country), family = gaussian(), data = total_model_data)
 
 re_comparison <- list(
@@ -550,6 +553,73 @@ print(make_aicc_df(re_comparison))
 # ── No random effects  ────────────────────────────────────────────────────────
 # Sites as independent observations.
 
+
+# ── No random effects  ────────────────────────────────────────────────────────
+# Sites as independent observations.
+
+# --- Null ---
+s1_m0 <- lm(log_mean_biomass ~ 1, data = total_model_data)
+
+# --- Single predictor ---
+s1_m_env          <- lm(log_mean_biomass ~ sst_sc + log_chla_sc, data = total_model_data)
+s1_m_market       <- lm(log_mean_biomass ~ log_market_gravity_sc, data = total_model_data)
+s1_m_settgrav     <- lm(log_mean_biomass ~ log_settlement_grav_sc, data = total_model_data)
+s1_m_settpop      <- lm(log_mean_biomass ~ log_settlement_pop_sc, data = total_model_data)
+s1_m_hab          <- lm(log_mean_biomass ~ rugosity_sc, data = total_model_data)
+
+# --- Environment + human pressure ---
+s1_m_env_mkt      <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc, data = total_model_data)
+s1_m_env_sett     <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc, data = total_model_data)
+s1_m_env_pop      <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_pop_sc, data = total_model_data)
+
+# --- Habitat + human pressure ---
+s1_m_hab_market   <- lm(log_mean_biomass ~ rugosity_sc + log_market_gravity_sc, data = total_model_data)
+s1_m_hab_settgrav <- lm(log_mean_biomass ~ rugosity_sc + log_settlement_grav_sc, data = total_model_data)
+s1_m_hab_settpop  <- lm(log_mean_biomass ~ rugosity_sc + log_settlement_pop_sc, data = total_model_data)
+
+# --- Full (single human pressure metric) ---
+s1_m_full_mkt     <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc, data = total_model_data)
+s1_m_full_sett    <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc, data = total_model_data)
+s1_m_full_pop     <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_pop_sc  + rugosity_sc, data = total_model_data)
+
+# --- Combined gravity metrics ---
+s1_m_both_grav        <- lm(log_mean_biomass ~ log_market_gravity_sc + log_settlement_grav_sc, data = total_model_data)
+s1_m_hab_both_grav    <- lm(log_mean_biomass ~ rugosity_sc + log_market_gravity_sc + log_settlement_grav_sc, data = total_model_data)
+s1_m_env_both_grav    <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + log_settlement_grav_sc, data = total_model_data)
+s1_m_full_both_grav   <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + log_settlement_grav_sc + rugosity_sc, data = total_model_data)
+
+model_list_s1 <- list(
+  # Null
+  "Null"                               = s1_m0,
+  # Single predictor
+  "Environment"                        = s1_m_env,
+  "Market gravity"                     = s1_m_market,
+  "Settlement gravity"                 = s1_m_settgrav,
+  "Settlement pop."                    = s1_m_settpop,
+  "Habitat"                            = s1_m_hab,
+  # Environment + human pressure
+  "Env + market gravity"               = s1_m_env_mkt,
+  "Env + settlement gravity"           = s1_m_env_sett,
+  "Env + settlement pop."              = s1_m_env_pop,
+  # Habitat + human pressure
+  "Habitat + market gravity"           = s1_m_hab_market,
+  "Habitat + settlement gravity"       = s1_m_hab_settgrav,
+  "Habitat + settlement pop."          = s1_m_hab_settpop,
+  # Full - single human pressure
+  "Full (market gravity)"              = s1_m_full_mkt,
+  "Full (settlement gravity)"          = s1_m_full_sett,
+  "Full (settlement pop.)"             = s1_m_full_pop,
+  # Combined gravity
+  "Both gravity"                       = s1_m_both_grav,
+  "Habitat + both gravity"             = s1_m_hab_both_grav,
+  "Env + both gravity"                 = s1_m_env_both_grav,
+  "Full (both gravity)"                = s1_m_full_both_grav
+)
+
+cat("\n--- AICc: Site-level candidate models ---\n")
+aicc_site <- make_aicc_df(model_list_s1)
+print(aicc_site)
+
 s1_m0 <- lm(log_mean_biomass ~ 1,data = total_model_data) 
 s1_m_env <- lm(log_mean_biomass ~ sst_sc + log_chla_sc, data = total_model_data)
 s1_m_market <- lm(log_mean_biomass ~ log_market_gravity_sc, data = total_model_data)
@@ -562,23 +632,15 @@ s1_m_habitat_settgrav <- lm(log_mean_biomass ~ rugosity_sc + log_settlement_grav
 s1_m_full_mkt  <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc, data = total_model_data)
 s1_m_full_sett <- lm(log_mean_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc, data = total_model_data)
 
-model_list_s1 <- list(
-  "Null"                      = s1_m0,
-  "Environment"               = s1_m_env,
-  "Market gravity"            = s1_m_market,
-  "Settlement gravity"        = s1_m_settgrav,
-  "Habitat"                   = s1_m_hab,
-  "Env + market gravity"      = s1_m_env_mkt,
-  "Env + settlement gravity"  = s1_m_env_sett,
-  "Habitat + market gravity" = s1_m_habitat_market,
-  "Habitat + settlement gravity" = s1_m_habitat_settgrav,
-  "Full (market gravity)"     = s1_m_full_mkt,
-  "Full (settlement gravity)" = s1_m_full_sett
-)
+# Top model set for inference (cumulative weight ~0.76):
+# 1. Habitat only
+# 2. Habitat + settlement pop.
+# 3. Habitat + settlement gravity
 
-cat("\n--- AICc: Site-level candidate models ---\n")
-aicc_site <- make_aicc_df(model_list_s1)
-print(aicc_site)
+# Can justifiably drop:
+# - Combined gravity models (not supported)
+# - All environment-only combinations (delta > 20)
+# - Market gravity (consistently weakest human pressure metric)
 
 # ── Residual diagnostics — top three models ───────────────────
 
@@ -591,7 +653,16 @@ jpeg("diagnostics_site_habitat.jpg", width = 25, height = 20, units = "cm", res 
 par(mfrow = c(2, 2)); plot(s1_m_hab); par(mfrow = c(1, 1))
 dev.off()
 
-# Model 2: Habitat + settlement gravity
+# Model 2: Habitat + settlement pop
+cat("\n--- Habitat + settlement pop ---\n")
+par(mfrow = c(2, 2)); plot(s1_m_hab_settpop); par(mfrow = c(1, 1))
+summary(s1_m_hab_settpop)
+
+jpeg("diagnostics_site_habitat_market.jpg", width = 25, height = 20, units = "cm", res = 300)
+par(mfrow = c(2, 2)); plot(s1_m_habitat_market); par(mfrow = c(1, 1))
+dev.off()
+
+# Model 3: Habitat + settlement gravity
 cat("\n--- Habitat + settlement gravity ---\n")
 par(mfrow = c(2, 2)); plot(s1_m_habitat_settgrav); par(mfrow = c(1, 1))
 summary(s1_m_habitat_settgrav)
@@ -600,37 +671,33 @@ jpeg("diagnostics_site_habitat_settgrav.jpg", width = 25, height = 20, units = "
 par(mfrow = c(2, 2)); plot(s1_m_habitat_settgrav); par(mfrow = c(1, 1))
 dev.off()
 
-
-# Model 3: Habitat + market gravity
-cat("\n--- Habitat + market gravity ---\n")
-par(mfrow = c(2, 2)); plot(s1_m_habitat_market); par(mfrow = c(1, 1))
-summary(s1_m_habitat_market)
-
-jpeg("diagnostics_site_habitat_market.jpg", width = 25, height = 20, units = "cm", res = 300)
-par(mfrow = c(2, 2)); plot(s1_m_habitat_market); par(mfrow = c(1, 1))
-dev.off()
-
 # ── Marginal effect plots — site level ───────────────────────
 # Predictions holding all other predictors at their mean
 # (= 0 on the scaled axis).
 
-# Rugosity — present in all three top models
+# Rugosity — present in all three top models; use habitat-only model
 ( p_site_rugosity <- plot_effect(s1_m_hab,
-                                      total_model_data,
-                                      "rugosity_sc",
-                                      "Rugosity (scaled)") )
+                                 total_model_data,
+                                 "rugosity_sc",
+                                 "Rugosity (scaled)") )
 
-# Market gravity — from habitat + market gravity model
-( p_site_market <- plot_effect(s1_m_habitat_market,
-                                    total_model_data,
-                                    "log_market_gravity_sc",
-                                    "Market gravity (scaled)") )
+# Settlement pop. — from habitat + settlement pop. model
+( p_site_settpop <- plot_effect(s1_m_hab_settpop,
+                                total_model_data,
+                                "log_settlement_pop_sc",
+                                "Settlement pop. (scaled)") )
 
 # Settlement gravity — from habitat + settlement gravity model
-( p_site_sett <- plot_effect(s1_m_habitat_settgrav,
-                                  total_model_data,
-                                  "log_settlement_grav_sc",
-                                  "Settlement gravity (scaled)") )
+( p_site_settgrav <- plot_effect(s1_m_hab_settgrav,
+                                 total_model_data,
+                                 "log_settlement_grav_sc",
+                                 "Settlement gravity (scaled)") )
+
+# Combined figure
+jpeg("site_marginal_effects.jpg", width = 33, height = 11, units = "cm", res = 300)
+gridExtra::grid.arrange(p_site_rugosity, p_site_settpop, p_site_settgrav, ncol = 3)
+dev.off()
+
 # ============================================================
 #  TRANSECT-LEVEL BIOMASS (SENSITIVITY CHECK)
 #
@@ -698,7 +765,7 @@ ggplot(transect_model_data,
 # F1: Gaussian on log(y)
 mF1_gaussian <- glmmTMB(
   log_transect_biomass ~ sst_sc + log_chla_sc +
-    log_market_gravity_sc + rugosity_sc + (1 | site),
+    log_settlement_grav_sc  + rugosity_sc + (1 | site),
   family = gaussian(),
   data   = transect_model_data
 )
@@ -715,7 +782,7 @@ testOutliers(resF1)
 # F2: Gamma (log link)
 mF2_gamma <- glmmTMB(
   transect_total_biomass ~ sst_sc + log_chla_sc +
-    log_market_gravity_sc + rugosity_sc + (1 | site),
+    log_settlement_grav_sc  + rugosity_sc + (1 | site),
   family = Gamma(link = "log"),
   data   = transect_model_data
 )
@@ -737,14 +804,14 @@ testOutliers(resF2)
 # Anchor: full market gravity model — same fixed effects across
 # all RE structures.
 
-re_t_null    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc,
+re_t_null    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc  + rugosity_sc,
                         family = gaussian(), data = transect_model_data)
 
-re_t_site    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_t_site    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc  + rugosity_sc +
                           (1 | site),
                         family = gaussian(), data = transect_model_data)
 
-re_t_nested  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_t_nested  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc  + rugosity_sc +
                           (1 | country/site),
                         family = gaussian(), data = transect_model_data)
 
@@ -757,33 +824,75 @@ re_comparison_t <- list(
 cat("\n--- RE structure comparison (transect level) ---\n")
 print(make_aicc_df(re_comparison_t))
 
+# ── RE structure decision ─────────────────────────────────────
+# (1 | site) selected (weight = 0.74 vs 0.26 for country/site;
+# delta AICc = 2.12). Site-level grouping is essential (delta vs
+# No RE = 17.61) — transects within sites are substantially more
+# similar than expected by chance. Country-level nesting adds
+# marginal improvement, consistent with Part 1 finding that
+# country clustering is largely absorbed by included predictors.
+# Proceed with (1 | site).
+
 # ── Candidate models ──────────────────────────────────────────
 # Family: Gaussian on log(y); random effect: (1 | site).
 
-m0             <- glmmTMB(log_transect_biomass ~ 1                                                                         + (1 | site), family = gaussian(), data = transect_model_data)
-m_env          <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc                                                     + (1 | site), family = gaussian(), data = transect_model_data)
-m_market       <- glmmTMB(log_transect_biomass ~ log_market_gravity_sc                                                    + (1 | site), family = gaussian(), data = transect_model_data)
-m_settgrav     <- glmmTMB(log_transect_biomass ~ log_settlement_grav_sc                                                   + (1 | site), family = gaussian(), data = transect_model_data)
-m_hab          <- glmmTMB(log_transect_biomass ~ rugosity_sc                                                              + (1 | site), family = gaussian(), data = transect_model_data)
-m_env_market   <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc                            + (1 | site), family = gaussian(), data = transect_model_data)
-m_env_settgrav <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc                           + (1 | site), family = gaussian(), data = transect_model_data)
-m_hab_market   <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_market_gravity_sc                                     + (1 | site), family = gaussian(), data = transect_model_data)
-m_hab_settgrav <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_settlement_grav_sc                                    + (1 | site), family = gaussian(), data = transect_model_data)
-m_full_market  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc             + (1 | site), family = gaussian(), data = transect_model_data)
-m_full_settgrav <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc            + (1 | site), family = gaussian(), data = transect_model_data)
+# --- Null ---
+m0              <- glmmTMB(log_transect_biomass ~ 1                                                                                      + (1 | site), family = gaussian(), data = transect_model_data)
+
+# --- Single predictor ---
+m_env           <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc                                                                  + (1 | site), family = gaussian(), data = transect_model_data)
+m_market        <- glmmTMB(log_transect_biomass ~ log_market_gravity_sc                                                                 + (1 | site), family = gaussian(), data = transect_model_data)
+m_settgrav      <- glmmTMB(log_transect_biomass ~ log_settlement_grav_sc                                                                + (1 | site), family = gaussian(), data = transect_model_data)
+m_settpop       <- glmmTMB(log_transect_biomass ~ log_settlement_pop_sc                                                                 + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab           <- glmmTMB(log_transect_biomass ~ rugosity_sc                                                                           + (1 | site), family = gaussian(), data = transect_model_data)
+
+# --- Environment + human pressure ---
+m_env_market    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc                                         + (1 | site), family = gaussian(), data = transect_model_data)
+m_env_settgrav  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc                                        + (1 | site), family = gaussian(), data = transect_model_data)
+m_env_settpop   <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_pop_sc                                         + (1 | site), family = gaussian(), data = transect_model_data)
+
+# --- Habitat + human pressure ---
+m_hab_market    <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_market_gravity_sc                                                   + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab_settgrav  <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_settlement_grav_sc                                                  + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab_settpop   <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_settlement_pop_sc                                                   + (1 | site), family = gaussian(), data = transect_model_data)
+
+# --- Full (single human pressure metric) ---
+m_full_market   <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc                          + (1 | site), family = gaussian(), data = transect_model_data)
+m_full_settgrav <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc                          + (1 | site), family = gaussian(), data = transect_model_data)
+m_full_settpop  <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_settlement_pop_sc  + rugosity_sc                          + (1 | site), family = gaussian(), data = transect_model_data)
+
+# --- Combined gravity metrics ---
+m_both_grav         <- glmmTMB(log_transect_biomass ~ log_market_gravity_sc + log_settlement_grav_sc                                   + (1 | site), family = gaussian(), data = transect_model_data)
+m_hab_both_grav     <- glmmTMB(log_transect_biomass ~ rugosity_sc + log_market_gravity_sc + log_settlement_grav_sc                     + (1 | site), family = gaussian(), data = transect_model_data)
+m_env_both_grav     <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + log_settlement_grav_sc            + (1 | site), family = gaussian(), data = transect_model_data)
+m_full_both_grav    <- glmmTMB(log_transect_biomass ~ sst_sc + log_chla_sc + log_market_gravity_sc + log_settlement_grav_sc + rugosity_sc + (1 | site), family = gaussian(), data = transect_model_data)
 
 model_list_transect <- list(
-  "Null"                         = m0,
-  "Environment"                  = m_env,
-  "Market gravity"               = m_market,
-  "Settlement gravity"           = m_settgrav,
-  "Habitat"                      = m_hab,
-  "Env + market gravity"         = m_env_market,
-  "Env + settlement gravity"     = m_env_settgrav,
-  "Habitat + market gravity"     = m_hab_market,
-  "Habitat + settlement gravity" = m_hab_settgrav,
-  "Full (market gravity)"        = m_full_market,
-  "Full (settlement gravity)"    = m_full_settgrav
+  # Null
+  "Null"                               = m0,
+  # Single predictor
+  "Environment"                        = m_env,
+  "Market gravity"                     = m_market,
+  "Settlement gravity"                 = m_settgrav,
+  "Settlement pop."                    = m_settpop,
+  "Habitat"                            = m_hab,
+  # Environment + human pressure
+  "Env + market gravity"               = m_env_market,
+  "Env + settlement gravity"           = m_env_settgrav,
+  "Env + settlement pop."              = m_env_settpop,
+  # Habitat + human pressure
+  "Habitat + market gravity"           = m_hab_market,
+  "Habitat + settlement gravity"       = m_hab_settgrav,
+  "Habitat + settlement pop."          = m_hab_settpop,
+  # Full - single human pressure
+  "Full (market gravity)"              = m_full_market,
+  "Full (settlement gravity)"          = m_full_settgrav,
+  "Full (settlement pop.)"             = m_full_settpop,
+  # Combined gravity
+  "Both gravity"                       = m_both_grav,
+  "Habitat + both gravity"             = m_hab_both_grav,
+  "Env + both gravity"                 = m_env_both_grav,
+  "Full (both gravity)"                = m_full_both_grav
 )
 
 cat("\n--- AICc: Transect-level biomass ---\n")
@@ -804,6 +913,18 @@ summary(m_hab)
 
 # ── Marginal effect plot ──────────────────────────────────────
 ( p_rug <- plot_effect(m_hab, transect_model_data, "rugosity_sc", "Rugosity (scaled)") )
+
+# ── Results ─────────────────────────────────────
+# Part 1 best model: s1_m_hab  — Habitat only
+# Part 2 best model: m_hab     — Habitat only
+# Perfect convergence: transect-level results confirm site-level
+# findings are not an artefact of collapsing to site means.
+# Top model structure identical across both levels:
+#   1. Habitat only
+#   2. Habitat + settlement pop.  (delta ~1)
+#   3. Habitat + settlement gravity (delta ~1)
+# Environment adds nothing in either analysis.
+# Combined gravity not supported in either analysis.
 
 # ============================================================
 #  PART 3 — TRANSECT-LEVEL COUNTS (COMPLEMENTARY ANALYSIS)
@@ -857,7 +978,7 @@ transect_model_data %>%
 # C1: Poisson
 mC1_poisson <- glmmTMB(
   transect_total_count ~ sst_sc + log_chla_sc +
-    log_market_gravity_sc + rugosity_sc + (1 | site),
+    log_settlement_grav_sc + rugosity_sc + (1 | site),
   family = poisson(link = "log"),
   data   = transect_model_data
 )
@@ -875,7 +996,7 @@ testOutliers(resC1)
 # C2: NB2 — quadratic variance (classic NB)
 mC2_nb2 <- glmmTMB(
   transect_total_count ~ sst_sc + log_chla_sc +
-    log_market_gravity_sc + rugosity_sc + (1 | site),
+    log_settlement_grav_sc + rugosity_sc + (1 | site),
   family = nbinom2(link = "log"),
   data   = transect_model_data
 )
@@ -893,7 +1014,7 @@ testOutliers(resC2)
 # C3: NB1 — linear variance
 mC3_nb1 <- glmmTMB(
   transect_total_count ~ sst_sc + log_chla_sc +
-    log_market_gravity_sc + rugosity_sc + (1 | site),
+    log_settlement_grav_sc + rugosity_sc + (1 | site),
   family = nbinom1(link = "log"),
   data   = transect_model_data
 )
@@ -920,14 +1041,14 @@ print(make_aicc_df(list(
 # Anchor: full market gravity model — same fixed effects across
 # all RE structures.
 
-re_c_null   <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc,
+re_c_null   <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc,
                        family = nbinom2(link = "log"), data = transect_model_data)
 
-re_c_site   <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_c_site   <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc +
                          (1 | site),
                        family = nbinom2(link = "log"), data = transect_model_data)
 
-re_c_nested <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc + rugosity_sc +
+re_c_nested <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc +
                          (1 | country/site),
                        family = nbinom2(link = "log"), data = transect_model_data)
 
@@ -945,87 +1066,169 @@ print(make_aicc_df(re_comparison_c))
 
 count_family <- nbinom2(link = "log")
 
-cm0             <- glmmTMB(transect_total_count ~ 1                                                                        + (1 | site), family = count_family, data = transect_model_data)
-cm_env          <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc                                                    + (1 | site), family = count_family, data = transect_model_data)
-cm_market       <- glmmTMB(transect_total_count ~ log_market_gravity_sc                                                   + (1 | site), family = count_family, data = transect_model_data)
-cm_settgrav     <- glmmTMB(transect_total_count ~ log_settlement_grav_sc                                                  + (1 | site), family = count_family, data = transect_model_data)
-cm_hab          <- glmmTMB(transect_total_count ~ rugosity_sc                                                             + (1 | site), family = count_family, data = transect_model_data)
-cm_env_mkt      <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc                           + (1 | site), family = count_family, data = transect_model_data)
-cm_env_sett     <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc                          + (1 | site), family = count_family, data = transect_model_data)
-cm_hab_market   <- glmmTMB(transect_total_count ~ rugosity_sc + log_market_gravity_sc                                    + (1 | site), family = count_family, data = transect_model_data)
-cm_hab_settgrav <- glmmTMB(transect_total_count ~ rugosity_sc + log_settlement_grav_sc                                   + (1 | site), family = count_family, data = transect_model_data)
-cm_full_mkt     <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc            + (1 | site), family = count_family, data = transect_model_data)
-cm_full_sett    <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc            + (1 | site), family = count_family, data = transect_model_data)
+# --- Null ---
+cm0               <- glmmTMB(transect_total_count ~ 1                                                                                      + (1 | site), family = count_family, data = transect_model_data)
+
+# --- Single predictor ---
+cm_env            <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc                                                                  + (1 | site), family = count_family, data = transect_model_data)
+cm_market         <- glmmTMB(transect_total_count ~ log_market_gravity_sc                                                                 + (1 | site), family = count_family, data = transect_model_data)
+cm_settgrav       <- glmmTMB(transect_total_count ~ log_settlement_grav_sc                                                                + (1 | site), family = count_family, data = transect_model_data)
+cm_settpop        <- glmmTMB(transect_total_count ~ log_settlement_pop_sc                                                                 + (1 | site), family = count_family, data = transect_model_data)
+cm_hab            <- glmmTMB(transect_total_count ~ rugosity_sc                                                                           + (1 | site), family = count_family, data = transect_model_data)
+
+# --- Environment + human pressure ---
+cm_env_mkt        <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc                                         + (1 | site), family = count_family, data = transect_model_data)
+cm_env_settgrav   <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc                                        + (1 | site), family = count_family, data = transect_model_data)
+cm_env_settpop    <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_pop_sc                                         + (1 | site), family = count_family, data = transect_model_data)
+
+# --- Habitat + human pressure ---
+cm_hab_market     <- glmmTMB(transect_total_count ~ rugosity_sc + log_market_gravity_sc                                                   + (1 | site), family = count_family, data = transect_model_data)
+cm_hab_settgrav   <- glmmTMB(transect_total_count ~ rugosity_sc + log_settlement_grav_sc                                                  + (1 | site), family = count_family, data = transect_model_data)
+cm_hab_settpop    <- glmmTMB(transect_total_count ~ rugosity_sc + log_settlement_pop_sc                                                   + (1 | site), family = count_family, data = transect_model_data)
+
+# --- Full (single human pressure metric) ---
+cm_full_mkt       <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc  + rugosity_sc                          + (1 | site), family = count_family, data = transect_model_data)
+cm_full_settgrav  <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_grav_sc + rugosity_sc                          + (1 | site), family = count_family, data = transect_model_data)
+cm_full_settpop   <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_settlement_pop_sc  + rugosity_sc                          + (1 | site), family = count_family, data = transect_model_data)
+
+# --- Combined gravity metrics ---
+cm_both_grav      <- glmmTMB(transect_total_count ~ log_market_gravity_sc + log_settlement_grav_sc                                       + (1 | site), family = count_family, data = transect_model_data)
+cm_hab_both_grav  <- glmmTMB(transect_total_count ~ rugosity_sc + log_market_gravity_sc + log_settlement_grav_sc                         + (1 | site), family = count_family, data = transect_model_data)
+cm_env_both_grav  <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc + log_settlement_grav_sc                + (1 | site), family = count_family, data = transect_model_data)
+cm_full_both_grav <- glmmTMB(transect_total_count ~ sst_sc + log_chla_sc + log_market_gravity_sc + log_settlement_grav_sc + rugosity_sc  + (1 | site), family = count_family, data = transect_model_data)
 
 model_list_counts <- list(
-  "Null"                         = cm0,
-  "Environment"                  = cm_env,
-  "Market gravity"               = cm_market,
-  "Settlement gravity"           = cm_settgrav,
-  "Habitat"                      = cm_hab,
-  "Env + market gravity"         = cm_env_mkt,
-  "Env + settlement gravity"     = cm_env_sett,
-  "Habitat + market gravity"     = cm_hab_market,
-  "Habitat + settlement gravity" = cm_hab_settgrav,
-  "Full (market gravity)"        = cm_full_mkt,
-  "Full (settlement gravity)"    = cm_full_sett
+  # Null
+  "Null"                               = cm0,
+  # Single predictor
+  "Environment"                        = cm_env,
+  "Market gravity"                     = cm_market,
+  "Settlement gravity"                 = cm_settgrav,
+  "Settlement pop."                    = cm_settpop,
+  "Habitat"                            = cm_hab,
+  # Environment + human pressure
+  "Env + market gravity"               = cm_env_mkt,
+  "Env + settlement gravity"           = cm_env_settgrav,
+  "Env + settlement pop."              = cm_env_settpop,
+  # Habitat + human pressure
+  "Habitat + market gravity"           = cm_hab_market,
+  "Habitat + settlement gravity"       = cm_hab_settgrav,
+  "Habitat + settlement pop."          = cm_hab_settpop,
+  # Full - single human pressure
+  "Full (market gravity)"              = cm_full_mkt,
+  "Full (settlement gravity)"          = cm_full_settgrav,
+  "Full (settlement pop.)"             = cm_full_settpop,
+  # Combined gravity
+  "Both gravity"                       = cm_both_grav,
+  "Habitat + both gravity"             = cm_hab_both_grav,
+  "Env + both gravity"                 = cm_env_both_grav,
+  "Full (both gravity)"                = cm_full_both_grav
 )
 
 cat("\n--- AICc: count models ---\n")
 print(make_aicc_df(model_list_counts))
 
-# ── Diagnostics on best model ─────────────────────────────────
-res_cm <- simulateResiduals(cm_full_sett, n = 1000)
+# ── Diagnostics — run on top two models ──────────────────────
+# Full (settlement gravity) and Full (settlement pop.) are
+# essentially equivalent (delta = 0.02, weights 0.20 vs 0.20)
+# and should both be inspected
 
-jpeg("dharma_best_count_model.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(res_cm, main = "DHARMa — best count model"); dev.off()
+res_cm_settgrav <- simulateResiduals(cm_full_settgrav, n = 1000)
+res_cm_settpop  <- simulateResiduals(cm_full_settpop,  n = 1000)
 
-plot(res_cm)
-testDispersion(res_cm)
-testZeroInflation(res_cm)
-testOutliers(res_cm)
-plotResiduals(res_cm, transect_model_data$rugosity_sc,            xlab = "Rugosity")
-plotResiduals(res_cm, transect_model_data$sst_sc,                 xlab = "SST")
-plotResiduals(res_cm, transect_model_data$log_chla_sc,            xlab = "Chl-a")
-plotResiduals(res_cm, transect_model_data$log_settlement_grav_sc, xlab = "Settlement gravity")
+jpeg("dharma_count_full_settgrav.jpg", width = 25, height = 15, units = "cm", res = 300)
+plot(res_cm_settgrav, main = "DHARMa — Full (settlement gravity)")
+dev.off()
 
-summary(cm_full_sett)
-exp(fixef(cm_full_sett)$cond)   # incidence rate ratios
+jpeg("dharma_count_full_settpop.jpg", width = 25, height = 15, units = "cm", res = 300)
+plot(res_cm_settpop, main = "DHARMa — Full (settlement pop.)")
+dev.off()
 
-# ── Marginal effect plots ─────────────────────────────────────
-p_count_rug  <- plot_effect(cm_full_sett, transect_model_data, "rugosity_sc",
-                            "Rugosity (scaled)",           "Expected fish count",
-                            colour = "#d7191c")
-p_count_sst  <- plot_effect(cm_full_sett, transect_model_data, "sst_sc",
-                            "SST (scaled)",                "Expected fish count",
-                            colour = "#d7191c")
-p_count_chla <- plot_effect(cm_full_sett, transect_model_data, "log_chla_sc",
-                            "Chl-a (scaled)",              "Expected fish count",
-                            colour = "#d7191c")
-p_count_grav <- plot_effect(cm_full_sett, transect_model_data, "log_settlement_grav_sc",
-                            "Settlement gravity (scaled)", "Expected fish count",
-                            colour = "#d7191c")
+plot(res_cm_settgrav)
+testDispersion(res_cm_settgrav)
+testZeroInflation(res_cm_settgrav)
+testOutliers(res_cm_settgrav)
 
-jpeg("count_marginal_effects.jpg", width = 33, height = 22, units = "cm", res = 300)
-gridExtra::grid.arrange(p_count_rug, p_count_sst,
-                        p_count_chla, p_count_grav, ncol = 2)
+plot(res_cm_settpop)
+testDispersion(res_cm_settpop)
+testZeroInflation(res_cm_settpop)
+testOutliers(res_cm_settpop)
+
+# ── Summaries ─────────────────────────────────────────────────
+summary(cm_full_settgrav)
+summary(cm_full_settpop)
+exp(fixef(cm_full_settgrav)$cond)
+exp(fixef(cm_full_settpop)$cond)
+
+# ── Residual plots against all predictors ─────────────────────
+plotResiduals(res_cm_settgrav, transect_model_data$rugosity_sc,            xlab = "Rugosity")
+plotResiduals(res_cm_settgrav, transect_model_data$sst_sc,                 xlab = "SST")
+plotResiduals(res_cm_settgrav, transect_model_data$log_chla_sc,            xlab = "Chl-a")
+plotResiduals(res_cm_settgrav, transect_model_data$log_settlement_grav_sc, xlab = "Settlement gravity")
+
+plotResiduals(res_cm_settpop, transect_model_data$rugosity_sc,            xlab = "Rugosity")
+plotResiduals(res_cm_settpop, transect_model_data$sst_sc,                 xlab = "SST")
+plotResiduals(res_cm_settpop, transect_model_data$log_chla_sc,            xlab = "Chl-a")
+plotResiduals(res_cm_settpop, transect_model_data$log_settlement_pop_sc,  xlab = "Settlement pop.")
+
+# ── Marginal effect plots — both top models ───────────────────
+( p_count_rug_sg   <- plot_effect(cm_full_settgrav, transect_model_data, "rugosity_sc",
+                                "Rugosity (scaled)",           "Expected fish count", colour = "#d7191c") )
+( p_count_sst_sg   <- plot_effect(cm_full_settgrav, transect_model_data, "sst_sc",
+                                "SST (scaled)",                "Expected fish count", colour = "#d7191c") )
+( p_count_chla_sg  <- plot_effect(cm_full_settgrav, transect_model_data, "log_chla_sc",
+                                "Chl-a (scaled)",              "Expected fish count", colour = "#d7191c") )
+( p_count_grav_sg  <- plot_effect(cm_full_settgrav, transect_model_data, "log_settlement_grav_sc",
+                                "Settlement gravity (scaled)", "Expected fish count", colour = "#d7191c") )
+
+( p_count_rug_sp   <- plot_effect(cm_full_settpop, transect_model_data, "rugosity_sc",
+                                "Rugosity (scaled)",           "Expected fish count", colour = "#d7191c") )
+( p_count_sst_sp   <- plot_effect(cm_full_settpop, transect_model_data, "sst_sc",
+                                "SST (scaled)",                "Expected fish count", colour = "#d7191c") )
+( p_count_chla_sp  <- plot_effect(cm_full_settpop, transect_model_data, "log_chla_sc",
+                                "Chl-a (scaled)",              "Expected fish count", colour = "#d7191c") )
+( p_count_pop_sp   <- plot_effect(cm_full_settpop, transect_model_data, "log_settlement_pop_sc",
+                                "Settlement pop. (scaled)",    "Expected fish count", colour = "#d7191c") )
+
+jpeg("count_marginal_effects_settgrav.jpg", width = 33, height = 22, units = "cm", res = 300)
+gridExtra::grid.arrange(p_count_rug_sg, p_count_sst_sg,
+                        p_count_chla_sg, p_count_grav_sg, ncol = 2)
+dev.off()
+
+jpeg("count_marginal_effects_settpop.jpg", width = 33, height = 22, units = "cm", res = 300)
+gridExtra::grid.arrange(p_count_rug_sp, p_count_sst_sp,
+                        p_count_chla_sp, p_count_pop_sp, ncol = 2)
 dev.off()
 
 # ============================================================
 #  SYNTHESIS: BIOMASS vs COUNT MODEL CONCLUSIONS
 #
 #  Part 1 best model:   s1_m_hab (lm, Gaussian on log-mean-biomass)
-#                       — Habitat only (lowest AICc)
+#                       — Habitat only (lowest AICc, weight = 0.29)
 #  Part 2 best model:   m_hab (glmmTMB, Gaussian on log-transect-biomass)
-#                       — Habitat only (lowest AICc)
-#  Part 3 best model:   cm_full_sett (glmmTMB, NB2)
-#                       — Full model with settlement gravity
+#                       — Habitat only (lowest AICc, weight = 0.30)
+#  Part 3 best models:  cm_full_settgrav / cm_full_settpop (glmmTMB, NB2)
+#                       — Full models with settlement gravity or pop.
+#                         (delta AICc = 0.02; effectively equivalent)
 #
-#  Convergence across Parts 1 and 2 confirms site-level findings
-#  are not an artefact of averaging.
-#  Divergence between biomass and count models suggests human
-#  pressure and chlorophyll operate through abundance rather
-#  than body size.
+#  Convergence across Parts 1 and 2 confirms site-level biomass
+#  findings are not an artefact of collapsing to site means.
+#  Top model structure identical at both levels:
+#    1. Habitat only
+#    2. Habitat + settlement pop.  (delta ~1)
+#    3. Habitat + settlement gravity (delta ~1)
+#
+#  Divergence between biomass (Parts 1-2) and count (Part 3) models:
+#  Environment and human pressure enter the count models but not
+#  the biomass models, suggesting these predictors operate through
+#  fish abundance rather than individual body size.
+#
+#  Settlement gravity and settlement pop. perform equivalently
+#  throughout all three parts — distance-weighting of population
+#  adds no explanatory power over raw population size.
+#
+#  Combined gravity (market + settlement) not supported in any part.
+#  Market gravity consistently the weakest human pressure metric.
 # ============================================================
 
 cat("\n=== PART 1 — Site-level biomass, best model ===\n")
@@ -1034,51 +1237,81 @@ summary(s1_m_hab)
 cat("\n=== PART 2 — Transect-level biomass, best model ===\n")
 summary(m_hab)
 
-cat("\n=== PART 3 — Count model, best model ===\n")
-summary(cm_full_sett)
+cat("\n=== PART 3 — Count models, top two (effectively equivalent) ===\n")
+summary(cm_full_settgrav)
+summary(cm_full_settpop)
 
 # ── Rugosity: consistent across all three parts ───────────────
 # Part 1: plain lm() — use coef()
 # Parts 2 & 3: glmmTMB — use fixef()$cond
-rug_site    <- coef(s1_m_hab)["rugosity_sc"]
-rug_biomass <- fixef(m_hab)$cond["rugosity_sc"]
-rug_count   <- fixef(cm_full_sett)$cond["rugosity_sc"]
+rug_site      <- coef(s1_m_hab)["rugosity_sc"]
+rug_biomass   <- fixef(m_hab)$cond["rugosity_sc"]
+rug_count_sg  <- fixef(cm_full_settgrav)$cond["rugosity_sc"]
+rug_count_sp  <- fixef(cm_full_settpop)$cond["rugosity_sc"]
 
 cat("\n--- Rugosity effect ---\n")
-cat("Part 1 — site biomass      beta:", round(rug_site,    3), "\n")
-cat("Part 2 — transect biomass  beta:", round(rug_biomass, 3), "\n")
-cat("Part 3 — count model       beta:", round(rug_count,   3), "\n")
-cat("Part 3 — count model        IRR:", round(exp(rug_count), 3), "\n")
-# Biomass beta > count beta: rugosity effect on biomass is
-# disproportionately large relative to abundance, suggesting
-# complex reefs support larger-bodied fish, not just more fish.
+cat("Part 1 — site biomass           beta:", round(rug_site,     3), "\n")
+cat("Part 2 — transect biomass       beta:", round(rug_biomass,  3), "\n")
+cat("Part 3 — count (sett. gravity)  beta:", round(rug_count_sg, 3),
+    " IRR:", round(exp(rug_count_sg), 3), "\n")
+cat("Part 3 — count (sett. pop.)     beta:", round(rug_count_sp, 3),
+    " IRR:", round(exp(rug_count_sp), 3), "\n")
+# Biomass beta > count beta across both Part 3 models: rugosity
+# effect on biomass is disproportionately large relative to
+# abundance, suggesting complex reefs support larger-bodied fish,
+# not just more fish.
 
-# ── Human pressure: appears in counts, absent from biomass ────
-cat("\n--- Human pressure (settlement gravity) ---\n")
-cat("Part 1 biomass: not in best model\n")
-cat("Part 2 biomass: not in best model\n")
-cat("Part 3 counts:  IRR =",
-    round(exp(fixef(cm_full_sett)$cond["log_settlement_grav_sc"]), 3),
-    "(p = 0.046)\n")
-# Consistent non-detection in both biomass analyses but detection
-# in counts is compatible with size-selective harvesting: large
-# individuals removed, small fish largely remain intact.
+# ── Human pressure: marginal in biomass, stronger in counts ───
+cat("\n--- Human pressure ---\n")
+cat("Part 1 biomass — settlement gravity: delta AICc = 0.72 (in top model set)\n")
+cat("Part 1 biomass — settlement pop.:    delta AICc = 0.31 (in top model set)\n")
+cat("Part 2 biomass — settlement gravity: delta AICc = 1.13 (in top model set)\n")
+cat("Part 2 biomass — settlement pop.:    delta AICc = 0.97 (in top model set)\n")
+cat("Part 3 counts  — settlement gravity IRR:",
+    round(exp(fixef(cm_full_settgrav)$cond["log_settlement_grav_sc"]), 3), "\n")
+cat("Part 3 counts  — settlement pop.    IRR:",
+    round(exp(fixef(cm_full_settpop)$cond["log_settlement_pop_sc"]), 3), "\n")
+# Human pressure appears marginally in biomass top model sets
+# (delta < 1.5) but more strongly in count models. Pattern is
+# consistent with size-selective harvesting: fishing removes
+# large individuals, reducing abundance of large fish while
+# total biomass signal is partially maintained by remaining
+# individuals. Settlement gravity and settlement pop. tell an
+# identical story throughout.
 
 # ── Chlorophyll-a: suppresses abundance, not biomass ──────────
 cat("\n--- Chlorophyll-a ---\n")
-cat("Part 3 counts  beta:", round(fixef(cm_full_sett)$cond["log_chla_sc"], 3),
-    " IRR:", round(exp(fixef(cm_full_sett)$cond["log_chla_sc"]), 3), "\n")
-cat("Parts 1 & 2 biomass: not in best model\n")
-# High chl-a (turbidity/runoff) reduces fish numbers but does
-# not detectably alter total biomass — individual fish in
-# turbid sites may be larger on average, compensating.
+cat("Parts 1 & 2 biomass: not in top model set\n")
+cat("Part 3 counts — settlement gravity model:",
+    " beta:", round(fixef(cm_full_settgrav)$cond["log_chla_sc"], 3),
+    " IRR:",  round(exp(fixef(cm_full_settgrav)$cond["log_chla_sc"]), 3), "\n")
+cat("Part 3 counts — settlement pop. model:",
+    " beta:", round(fixef(cm_full_settpop)$cond["log_chla_sc"], 3),
+    " IRR:",  round(exp(fixef(cm_full_settpop)$cond["log_chla_sc"]), 3), "\n")
+# High chl-a (turbidity/nutrient runoff) reduces fish numbers
+# but does not detectably alter total biomass — fish in turbid
+# sites may be larger on average, compensating for lower numbers
+# in total biomass terms.
 
 # ── SST: weak positive trend in counts only ───────────────────
 cat("\n--- SST ---\n")
-cat("Part 3 counts  beta:", round(fixef(cm_full_sett)$cond["sst_sc"], 3),
-    " IRR:", round(exp(fixef(cm_full_sett)$cond["sst_sc"]), 3),
-    " (p = 0.094)\n")
-cat("Parts 1 & 2 biomass: not in best model\n")
-# Weak, non-significant positive trend — warmer sites may support
-# marginally higher abundance but effect is not robust.
+cat("Parts 1 & 2 biomass: not in top model set\n")
+cat("Part 3 counts — settlement gravity model:",
+    " beta:", round(fixef(cm_full_settgrav)$cond["sst_sc"], 3),
+    " IRR:",  round(exp(fixef(cm_full_settgrav)$cond["sst_sc"]), 3), "\n")
+cat("Part 3 counts — settlement pop. model:",
+    " beta:", round(fixef(cm_full_settpop)$cond["sst_sc"], 3),
+    " IRR:",  round(exp(fixef(cm_full_settpop)$cond["sst_sc"]), 3), "\n")
+# Weak positive trend — warmer sites may support marginally
+# higher fish abundance. Consistent across both top count models
+# but should be interpreted cautiously given model uncertainty.
 
+# ── Market gravity: not supported in any part ─────────────────
+cat("\n--- Market gravity ---\n")
+cat("Part 1 biomass: delta AICc = 2.03 vs habitat-only\n")
+cat("Part 2 biomass: delta AICc = 2.00 vs habitat-only\n")
+cat("Part 3 counts:  delta AICc = 1.88 vs full settlement gravity model\n")
+# Market gravity consistently the weakest human pressure metric
+# across all three parts. Commercial fishing access (market
+# gravity) explains less variation than local residential
+# pressure (settlement metrics) in this system.

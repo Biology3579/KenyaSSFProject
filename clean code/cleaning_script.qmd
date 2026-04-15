@@ -64,6 +64,13 @@ fish_abund_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_fish_abund.csv
 master_location_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_master_location.csv")) %>%  filter(Country == "Comoros" | Country == "Kenya" | Country == "Madagascar" | Country == "Mozambique"  | Country == "Tanzania" )
 dive_details_2009_raw <- read.csv(here("raw_data","cordio_2009_2016_dive_details.csv"))%>%  filter(Country == "Comoros" | Country == "Kenya" | Country == "Madagascar" | Country == "Mozambique"  | Country == "Tanzania" )
 
+# Load connectivity data 
+
+connectivity_fish_abund_raw <- read.csv(here("raw_data","connectivity_fish.csv")) %>%  filter(Country == "Comoros" | Country == "Madagascar" | Country == "Mozambique"  | Country == "Tanzania" )
+connectivity_master_location_raw <- read.csv(here("raw_data","connectivity_master_location.csv"))  %>%  filter(Country == "Comoros" | Country == "Madagascar" | Country == "Mozambique"  | Country == "Tanzania" )
+connectivity_dive_details_raw <- read.csv(here("raw_data","connectivity_dive_details.csv")) %>%  filter(Country == "Comoros" | Country == "Madagascar" | Country == "Mozambique"  | Country == "Tanzania" )
+
+# Load species data
 master_species <- read.csv(here("raw_data","master_species_2009.csv"))
 
 ```
@@ -81,6 +88,12 @@ master_species <- read.csv(here("raw_data","master_species_2009.csv"))
 explore_data_structure(fish_abund_2009_raw, "FISH ABUNDANCE 2009-2016")
 explore_data_structure(master_location_2009_raw, "LOCATION 2009-2016")
 explore_data_structure(dive_details_2009_raw, "DIVE DETAILS 2009-2016")
+
+
+# Explore connectivity data
+explore_data_structure(connectivity_fish_abund_raw, "FISH ABUNDANCE 2009-2016")
+explore_data_structure(connectivity_master_location_raw, "LOCATION 2009-2016")
+explore_data_structure(connectivity_dive_details_raw, "DIVE DETAILS 2009-2016")
 
 ```
 
@@ -116,6 +129,29 @@ clean_fish_2009 <- fish_abund_2009_raw %>%
     # columns that should be factors (categorical)
     factor_cols = intersect(c("country", "location", "site", "station", "family", "trophic_group"), names(.))
   ) 
+
+# Clean connectivity fish data 2009-2016
+clean_fish_connectivity <- connectivity_fish_abund_raw %>%
+  clean_column_names() %>%
+  drop_columns(drop_cols = c("species_old", "taxon_group")) %>%
+  # standardise the textual columns
+  standardize_text(c("site", "station", "country", "location", "family", "species","trophic_group")) %>% 
+  convert_column_types(
+    date_cols = intersect(c("date"), names(.)),
+    #columns that should be integers
+    integer_cols = intersect(
+      c("ts_no", "number"),
+      names(.)
+    ),
+    # columns that should be numeric
+    numeric_cols = intersect(
+      c("size_class", "l", "a", "b", "weight_g", "tot_wt_g"),
+      names(.)
+    ),
+    # columns that should be factors (categorical)
+    factor_cols = intersect(c("country", "location", "site", "station", "family", "trophic_group"), names(.))
+  ) 
+
 
 ```
 
@@ -158,6 +194,41 @@ clean_location_2009 <- master_location_2009_raw %>%
   { if(all(c("latitude","longitude") %in% names(.)))
     fix_coordinates(., lat_col = "latitude", lon_col =
                       "longitude") else . }
+
+# Clean connectivity data 2009-2016
+clean_location_connectivity <- connectivity_master_location_raw %>%
+  clean_column_names() %>%
+  # standardise textual columns
+  standardize_text(c("station", "site", "location",
+      "country", "orientation", "geology",
+      "reef_geomorphology", "reef_type")) %>% 
+  convert_column_types(
+    date_cols = intersect(c("date"), names(.)),
+    
+    #columns that should be integers
+    integer_cols = intersect(
+      c("exposure"), names(.)),
+    
+    # columns that should be numeric
+    numeric_cols = intersect(
+      c("latitude", "longitude", "prop_connectivity"), names(.)),
+    
+    # columns that should be factors (categorical)
+    factor_cols = intersect(c("station", "site", 
+      "location", "country", "orientation", "geology",
+      "reef_geomorphology", "reef_type"), names(.))) %>%
+    
+# Handle mpa_status explicitly with correct ordered levels
+  mutate(
+    mpa_status = factor(
+      str_trim(str_to_lower(mpa_status)),   # standardise text manually
+      levels  = c("none", "low", "medium"),
+      ordered = FALSE                        # unordered — "none" as reference
+    )
+  ) %>%
+    
+  { if(all(c("latitude","longitude") %in% names(.)))
+    fix_coordinates(., lat_col = "latitude", lon_col = "longitude") else . }
 ```
 
 ### Clean dive data
@@ -192,6 +263,28 @@ clean_dive_details_2009 <- dive_details_2009_raw %>%
     # columns that should be factors (categorical)
     factor_cols = intersect(c("station", "site", "location", "country", "depth_categories", "assoc_habitats"), names(.))) 
 
+# Clean connectivity dive data 2009-2016
+clean_dive_details_connectivity <- connectivity_dive_details_raw %>%
+  clean_column_names() %>%
+  drop_columns(drop_cols = c("dive_time", "other_notes",
+                "other_notes_1")) %>%
+  # standardise only the textual ID-like columns
+  standardize_text(c("station", "site", "location", "country",
+        "depth_categories", "assoc_habitats")) %>% 
+  convert_column_types(
+    date_cols = intersect(c("date"), names(.)),
+    
+    #columns that should be integers
+    integer_cols = NULL,
+    
+    # columns that should be numeric
+    numeric_cols = intersect(
+      c("max_depth_m", "min_depth_m", "rugosity"),
+      names(.)),
+    
+    # columns that should be factors (categorical)
+    factor_cols = intersect(c("station", "site", "location", "country", "depth_categories", "assoc_habitats"), names(.))) 
+
 ```
 
 ## Verify cleaning
@@ -205,6 +298,11 @@ clean_dive_details_2009 <- dive_details_2009_raw %>%
 explore_data_structure(clean_fish_2009, "CLEANED FISH ABUNDANCE 2009-2016")
 explore_data_structure(clean_location_2009, "CLEANED LOCATION 2009-2016")
 explore_data_structure(clean_dive_details_2009, "CLEANED DIVE DETAILS 2009-2016")
+
+# Explore cleaned connectivity data
+explore_data_structure(clean_fish_connectivity, "CLEANED FISH ABUNDANCE 2009-2016")
+explore_data_structure(clean_location_connectivity, "CLEANED LOCATION 2009-2016")
+explore_data_structure(clean_dive_details_connectivity, "CLEANED DIVE DETAILS 2009-2016")
 
 ```
 
@@ -221,6 +319,11 @@ Saves cleaned data into processed_data folder in directory for future use
 write_rds(clean_fish_2009, here("processed_data", "clean_fish_2009.rds"))
 write_rds(clean_location_2009, here("processed_data", "clean_location_2009.rds"))
 write_rds(clean_dive_details_2009, here("processed_data", "clean_dive_details_2009.rds"))
+
+# Save connectivity data
+write_rds(clean_fish_connectivity, here("processed_data", "clean_fish_connectivity.rds"))
+write_rds(clean_location_connectivity, here("processed_data", "clean_location_connectivity.rds"))
+write_rds(clean_dive_details_connectivity, here("processed_data", "clean_dive_details_connectivity.rds"))
 
 ```
 

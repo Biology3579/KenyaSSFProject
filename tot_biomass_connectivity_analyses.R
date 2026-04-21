@@ -57,6 +57,7 @@ library(corrplot)
 library(gridExtra)
 library(MASS)
 library(here)
+library(spdep) # spatial autocorrelation
 
 # ── FUNCTIONS ─────────────────────────────────────────────────
 
@@ -202,11 +203,15 @@ location_sites <- location_data %>%
 #  TRANSFORMATIONS, SCALING, AND PREDICTOR CHECKS
 # ============================================================
 
+#Join all predictors
 raw_predictors <- location_sites %>%
   left_join(chla_sites,     by = "site") %>%
   left_join(dhw_sites,      by = "site") %>%
   left_join(rugosity_sites, by = "site") %>%
   left_join(gravity_sites,  by = "site")
+
+# Visualise
+#...
 
 # ── Apply transformations ─────────────────────────────────────
 # Rugosity:         no transformation (approximately normal)
@@ -214,7 +219,7 @@ raw_predictors <- location_sites %>%
 # Chla:             log (right-skewed)
 # DHW:              log(x + 1) (right-skewed with zeros)
 # MPA status:       ordered factor (governance gradient)
-# Connectivity:     no transformation (inspect distribution)
+# Connectivity:     no transformation (...)
 
 transformed_predictors <- raw_predictors %>%
   transmute(
@@ -267,7 +272,11 @@ corr_matrix <- scaled_predictors %>%
   ) %>%
   cor(use = "complete.obs")
 
-corrplot(abs(corr_matrix),
+# ── Correlation matrix with direction and magnitude ───────────
+# Red = positive correlation, blue = negative correlation
+# Opacity scales with magnitude — stronger correlations more opaque
+
+corrplot(corr_matrix,           # use signed matrix, not abs()
          method      = "square",
          type        = "lower",
          tl.col      = "black",
@@ -275,17 +284,52 @@ corrplot(abs(corr_matrix),
          tl.offset   = 0.5,
          addCoef.col = "black",
          number.cex  = 0.8,
-         col         = colorRampPalette(c("white", "#d73027"))(200),
-         is.corr     = FALSE,
+         col         = colorRampPalette(
+           c("#2c7bb6",  # strong negative — deep blue
+             "#abd9e9",  # weak negative — light blue
+             "white",    # zero — white
+             "#f4a7a3",  # weak positive — light orange
+             "#d7191c")  # strong positive — deep red
+         )(200),
+         is.corr     = TRUE,    # treat as correlation — enables opacity scaling
          mar         = c(0, 0, 4, 2))
 
 # ── Collinearity summary ──────────────────────────────────────
-# Gravity metrics (settlement grav / pop / market): r = 0.53–0.54
-#   → Use one per model only. Settlement gravity selected as
-#     primary metric (see pre-analysis selection below).
-# Chla vs settlement gravity: r = 0.57 — monitor.
-# MPA vs chla: r = 0.42 — acceptable.
-# All other pairs: |r| < 0.40 — no concerns.
+#
+# GRAVITY METRICS (settlement gravity / pop / market): r = 0.53–0.54
+#   Moderate positive correlations — all three proxy the same
+#   underlying construct (local human pressure). Use one per
+#   model only. Primary metric selected via pre-analysis
+#   AICc comparison (see below).
+#
+# CHLA vs pressure metrics: r = -0.57 (settlement gravity),
+#   -0.23 (settlement pop), -0.33 (market gravity)
+#   Negative — productive sites tend to be less fished.
+#   Reflects geographic covariation between offshore
+#   productivity and remoteness from human settlements.
+#   Monitor chla coefficient in models where settlement
+#   gravity is included simultaneously.
+#
+# MPA vs settlement gravity: r = -0.36
+# MPA vs settlement pop:     r = -0.43
+#   Negative — protected sites tend to have lower nearby
+#   human pressure, consistent with MPAs being preferentially
+#   placed in more remote locations. MPA and settlement
+#   gravity partially capture the same geographic gradient.
+#
+# DHW vs market gravity: r = 0.42
+#   Moderate positive — warmer, higher-DHW sites tend to be
+#   near larger markets. Acceptable, monitor in models.
+#
+# CONNECTIVITY: all |r| < 0.30 across all predictors.
+#   Genuinely orthogonal to other predictors in this dataset.
+#
+# RUGOSITY: all |r| < 0.20 across all predictors.
+#   Clean and independent of all other predictors.
+#
+# No blocking collinearity in primary predictor set.
+# All pairwise |r| < 0.60 — threshold for concern.
+# Gravity metrics handled by single-metric-per-model rule.
 
 
 # ============================================================
@@ -332,9 +376,6 @@ print(make_aicc_df(list(
 # Settlement gravity is the primary pressure metric throughout.
 # Settlement pop. and market gravity retained for sensitivity
 # analysis only (Stage 4).
-
-rm(pressure_selection_data)
-
 
 # ============================================================
 #  ANALYSIS DATASETS
@@ -388,7 +429,57 @@ total_model_data <- transect_model_data %>%
 cat("\nSite model data:", nrow(total_model_data), "sites,",
     n_distinct(total_model_data$country), "countries\n")
 
-# ── Verify no NAs in primary predictors ──────────────────────
+# ── Confirm pressure metric selection in multivariate context ─ maybe do this...
+# Each model includes the full primary predictor set —
+# only the pressure metric differs. This ensures the comparison
+# reflects metric performance under the same conditions as the
+# main candidate models, not a reduced subset.
+# 
+# press_multi_settgrav <- lm(log_mean_biomass ~ rugosity_sc +
+#                              log_settlement_grav_sc +
+#                              connectivity_sc +
+#                              mpa_status +
+#                              log_chla_sc +
+#                              log_max_dhw_sc,
+#                            data = total_model_data)
+# 
+# press_multi_settpop  <- lm(log_mean_biomass ~ rugosity_sc +
+#                              log_settlement_pop_sc +
+#                              connectivity_sc +
+#                              mpa_status +
+#                              log_chla_sc +
+#                              log_max_dhw_sc,
+#                            data = total_model_data)
+# 
+# press_multi_mktgrav  <- lm(log_mean_biomass ~ rugosity_sc +
+#                              log_market_gravity_sc +
+#                              connectivity_sc +
+#                              mpa_status +
+#                              log_chla_sc +
+#                              log_max_dhw_sc,
+#                            data = total_model_data)
+# 
+# cat("\n--- Pressure metric selection: multivariate confirmation ---\n")
+# print(make_aicc_df(list(
+#   "Settlement gravity" = press_multi_settgrav,
+#   "Settlement pop."    = press_multi_settpop,
+#   "Market gravity"     = press_multi_mktgrav
+# )))
+
+
+# Multivariate confirmation (full predictor set):
+#   Settlement gravity: AICc = 104.53, weight = 0.795 (best)
+#   Market gravity:     ΔAICc = 3.32,  weight = 0.152
+#   Settlement pop.:    ΔAICc = 5.40,  weight = 0.053
+#
+# Settlement gravity selected as primary pressure metric.
+# Selection is consistent and strengthens in multivariate
+# context — weight increases from 0.672 to 0.795 when all
+# predictors are included simultaneously.
+# Market gravity and settlement population retained for
+# sensitivity analysis only.
+
+# ── Verify no NAs or zeros in primary predictors and response ─
 total_model_data %>%
   dplyr::select(site, rugosity_sc, log_settlement_grav_sc,
                 connectivity_sc, mpa_status,
@@ -396,12 +487,36 @@ total_model_data %>%
   filter(if_any(everything(), is.na)) %>%
   print(n = Inf)
 
+# Check for zeros in response variable
+# log(0) = -Inf so zeros in mean_biomass would produce
+# -Inf in log_mean_biomass — check both
+cat("\nZeros in mean_biomass:", 
+    sum(total_model_data$mean_biomass == 0), "\n")
+cat("-Inf in log_mean_biomass:", 
+    sum(is.infinite(total_model_data$log_mean_biomass)), "\n")
+cat("NAs in log_mean_biomass:", 
+    sum(is.na(total_model_data$log_mean_biomass)), "\n")
+
+# Summary of response distribution
+cat("\nResponse variable summary:\n")
+print(summary(total_model_data$log_mean_biomass))
+
 
 # ============================================================
 #  MODEL FAMILY SELECTION (documented, not re-run each time)
 #
-#  Three candidate families tested on an anchor model
-#  (rugosity + settlement gravity + chla + DHW):
+#  Purpose: select the appropriate error distribution and
+#  response transformation before fitting any candidate models.
+#
+#  Family selection uses the global model (all predictors)
+#  to test the distribution under the most demanding conditions
+#  the data will face. If the chosen distribution holds with
+#  all predictors included, it holds for all reduced models.
+#  MPA status included as it is part of the global model —
+#  its categorical structure is present in the actual analyses
+#  and should therefore be present in the diagnostic test.
+#
+#  Three candidate families tested on identical predictor set:
 #
 #  Gaussian (raw):   rejected — heteroscedasticity, non-normality,
 #                    curved residual pattern.
@@ -412,18 +527,91 @@ total_model_data %>%
 #                    homoscedasticity met. Minor upper tail
 #                    deviation at 2 sites, within acceptable range.
 #
-#  AICc (raw scale only — log not comparable):
+#  AICc (raw scale only — Gaussian log not comparable because
+#  response is transformed, changing the likelihood scale):
 #    Gamma:         AICc = 1146.93, weight = 1.00
 #    Gaussian raw:  AICc = 1191.14, ΔAICc = 44.21
 #  Gamma outperforms raw Gaussian, confirming transformation
-#  is required. Gaussian log selected on diagnostic quality.
+#  is required. Gaussian log selected on diagnostic quality
+#  over Gamma despite Gamma's better raw-scale AICc — the
+#  Q-Q deviation in Gamma indicates the error distribution
+#  is not well supported by these data regardless of AICc.
 #
 #  Proceed: lm() on log_mean_biomass throughout.
 # ============================================================
 
+# ── Gaussian on raw mean biomass ─────────────────────────────
+lm_gaussian_raw <- lm(mean_biomass ~ rugosity_sc +
+                        log_settlement_grav_sc +
+                        connectivity_sc +
+                        mpa_status +
+                        log_chla_sc +
+                        log_max_dhw_sc,
+                      data = total_model_data)
 
+par(mfrow = c(2, 2)); plot(lm_gaussian_raw); par(mfrow = c(1, 1))
+
+
+# ── Gaussian on log-transformed mean biomass ─────────────────
+lm_gaussian_log <- lm(log_mean_biomass ~ rugosity_sc +
+                        log_settlement_grav_sc +
+                        connectivity_sc +
+                        mpa_status +
+                        log_chla_sc +
+                        log_max_dhw_sc,
+                      data = total_model_data)
+
+par(mfrow = c(2, 2)); plot(lm_gaussian_log); par(mfrow = c(1, 1))
+
+# ── Gamma (log link) on raw mean biomass ─────────────────────
+glm_gamma <- glm(mean_biomass ~ rugosity_sc +
+                   log_settlement_grav_sc +
+                   connectivity_sc +
+                   mpa_status +
+                   log_chla_sc +
+                   log_max_dhw_sc,
+                 family = Gamma(link = "log"),
+                 data   = total_model_data)
+
+par(mfrow = c(2, 2)); plot(glm_gamma); par(mfrow = c(1, 1))
+
+# ── AICc comparison (raw scale only) ─────────────────────────
+cat("\n--- Family selection: AICc (raw scale) ---\n")
+print(make_aicc_df(list(
+  "Gaussian (raw)" = lm_gaussian_raw,
+  "Gamma"          = glm_gamma
+)))
+
+# ── Clean up ──────────────────────────────────────────────────
+# Family selection diagnostic summary:
+#
+# 1. Gaussian (raw):
+#    Residuals vs Fitted: strong curved pattern,
+#      heteroscedasticity clearly visible.
+#    Q-Q: systematic deviation, heavy upper tail.
+#    Scale-Location: strong upward trend — variance
+#      increases with fitted values. REJECTED.
+#
+# 2. Gaussian (log): SELECTED
+#    Residuals vs Fitted: flat, no systematic pattern.
+#    Q-Q: follows theoretical line closely — minor
+#      deviations at sites 27 (lower) and 48 (upper)
+#      within acceptable range for n = 54.
+#    Scale-Location: broadly flat.
+#    No sites outside Cook's distance threshold.
+#
+# 3. Gamma (log link):
+#    Residuals vs Fitted: flatter than raw Gaussian
+#      but residual pattern remains.
+#    Q-Q: systematic deviation in upper tail —
+#      Gamma error distribution not well supported.
+#    Scale-Location: slight upward trend remains.
+#    Sites 6, 48, 35 approach Cook's distance.
+#    REJECTED despite better raw-scale AICc (ΔAICc =
+#    46.05 vs Gaussian raw) — diagnostic quality
+#    does not support Gamma error structure.
 # ============================================================
-#  RANDOM EFFECT STRUCTURE (documented, not re-run each time)
+#  RANDOM EFFECT STRUCTURE (documented, not re-run each time) -- need to run for geomorpholgoy and lcoations
 #
 #  Country-level RE tested using glmmTMB (Gaussian):
 #    No RE:          AICc weight = 0.78
@@ -479,18 +667,38 @@ vp_result <- varpart(y_biomass,
 cat("\n--- Stage 1: Variance partitioning ---\n")
 print(vp_result)
 
-# ── Venn diagram ──────────────────────────────────────────────
-jpeg("varpart_venn.jpg", width = 18, height = 16,
-     units = "cm", res = 300)
-plot(vp_result,
-     Xnames = c("Local", "Spatial", "Environment"),
-     bg     = c("#4dac26", "#2c7bb6", "#d7191c"),
-     alpha  = 80,
-     digits = 2,
-     cex    = 1.1)
-title("Variance partitioning — reef fish biomass",
-      cex.main = 1.1)
-dev.off()
+# ── Variance plot ──────────────────────────────────────────────
+vp_fractions <- data.frame(
+  Group      = c("Local", "Spatial", "Environment"),
+  Unique     = c(0.242, -0.016, 0.054),
+  Unique_plot = c(0.242, 0.001, 0.054),  # floor spatial at 0.001 for visibility
+  p_label    = c("adj. R² = 0.242, p = 0.001", 
+                 "adj. R² < 0, p = 0.904",
+                 "adj. R² = 0.054, p = 0.077"),
+  sig        = c("significant", "not significant", "marginal")
+) %>%
+  mutate(Group = factor(Group, 
+                        levels = c("Environment", "Spatial", "Local")))
+
+#chaneg colours
+ggplot(vp_fractions, aes(x = Unique_plot, y = Group, 
+                         fill = sig)) +
+  geom_col(width = 0.5) +
+  geom_text(aes(label = p_label),
+            hjust = -0.05, size = 3.2) +
+  scale_fill_manual(values = c("significant"     = "#0072B2",  # blue
+                               "marginal"        = "#009E73",  # green
+                               "not significant" = "#bdbdbd")) + # grey 
+  scale_x_continuous(limits = c(0, 0.42),
+                     name   = "Unique variance explained (adj. R²)") +
+  labs(y       = NULL,
+       fill    = NULL,
+       caption = "n = 54 sites | Permutation tests, 999 permutations | Residual variance = 0.773") +
+  theme_bw(base_size = 13) +
+  theme(legend.position    = "top",
+        axis.title         = element_text(face = "bold"),
+        panel.grid.major.y = element_blank(),
+        plot.caption       = element_text(colour = "grey50", size = 9))
 
 # ── Significance tests for individual fractions ───────────────
 # Tests the unique fraction of each group (conditioned on others)
@@ -778,6 +986,47 @@ summary(m_local)
 #   thermal stress effect. Address in discussion.
 
 # ============================================================
+#  SPATIAL AUTOCORRELATION CHECK
+#  Tests residuals from best-supported Stage 2 model.
+#  Run once — result reported as a limitation in methods.
+# ============================================================
+
+# ── Site coordinates ──────────────────────────────────────────
+site_coords <- location_data %>%
+  mutate(site = as.character(site)) %>%
+  group_by(site) %>%
+  summarise(lon = first(longitude),
+            lat = first(latitude),
+            .groups = "drop")
+
+total_model_data_coords <- total_model_data %>%
+  left_join(site_coords, by = "site")
+
+# ── Spatial weights (k = 5 nearest neighbours) ────────────────
+coords_mat <- cbind(total_model_data_coords$lon,
+                    total_model_data_coords$lat)
+listw5 <- nb2listw(knn2nb(knearneigh(coords_mat, k = 5)),
+                   style = "W")
+
+# ── Moran's I on best-supported model residuals ───────────────
+cat("\n--- Moran's I: residuals from Local + env (best Stage 2) ---\n")
+print(moran.test(residuals(m_local_env), listw5))
+
+# ── Result ────────────────────────────────────────────────────
+# I = 0.108, p = 0.043 — weak but statistically significant
+# positive spatial autocorrelation in residuals.
+#
+# Warnings noted:
+#   4 sub-graphs: reflects 4 geographically separate
+#     country clusters. k-NN weights bridge clusters
+#     correctly — acceptable for this dataset.
+#
+# Effect is modest and decreases from Local alone
+# (I = 0.142, p = 0.015), confirming predictors absorb
+# some spatial structure. 
+# Acknowledged as a limitation — # n = 54 precludes reliable spatial error modelling.
+
+# ============================================================
 #  STAGE 3 — INTERACTION TESTING
 #
 #  Tests whether spatial management (MPA) and connectivity
@@ -919,7 +1168,7 @@ summary(m_int_conn_press)
 # making them non-comparable. These are corrected here.
 
 sens_settpop <- lm(log_mean_biomass ~ rugosity_sc +
-                     log_settlement_pop_sc +      # swapped
+                     log_settlement_pop_sc +      
                      connectivity_sc +
                      mpa_status +
                      log_chla_sc +
@@ -927,7 +1176,7 @@ sens_settpop <- lm(log_mean_biomass ~ rugosity_sc +
                    data = total_model_data)
 
 sens_mktgrav <- lm(log_mean_biomass ~ rugosity_sc +
-                     log_market_gravity_sc +      # swapped
+                     log_market_gravity_sc +      
                      connectivity_sc +
                      mpa_status +
                      log_chla_sc +
@@ -1090,12 +1339,12 @@ p_dhw <- plot_effect(best_model, total_model_data,
 # not included in best supported model and adds no explanatory
 # value (Stage 2: ΔAICc = 3.30, Stage 1: unique fraction ≈ 0)
 
-jpeg("marginal_effects_main.jpg",
-     width = 33, height = 11, units = "cm", res = 300)
-gridExtra::grid.arrange(p_rugosity, p_pressure,
-                        p_chla,    p_dhw,
-                        ncol = 4)
-dev.off()
+# jpeg("marginal_effects_main.jpg",
+#      width = 33, height = 11, units = "cm", res = 300)
+# gridExtra::grid.arrange(p_rugosity, p_pressure,
+#                         p_chla,    p_dhw,
+#                         ncol = 4)
+# dev.off()
 
 # ── MPA marginal means ────────────────────────────────────────
 # MPA status not included in best supported model (Local + env).
@@ -1131,475 +1380,13 @@ p_mpa <- ggplot(mpa_grid, aes(x = mpa_status, y = fit)) +
   theme(axis.title   = element_text(face = "bold"),
         plot.caption = element_text(colour = "grey50", size = 9))
 
-jpeg("marginal_effect_mpa.jpg",
-     width = 12, height = 12, units = "cm", res = 300)
-print(p_mpa)
-dev.off()
+# jpeg("marginal_effect_mpa.jpg",
+#      width = 12, height = 12, units = "cm", res = 300)
+# print(p_mpa)
+# dev.off()
 
 # ============================================================
 #  SESSION INFO
 # ============================================================
 cat("\n--- Session info ---\n")
 sessionInfo()
-
-#-------------------------------------------------------------------------------
-# ============================================================
-#  TRANSECT-LEVEL COUNTS (COMPLEMENTARY ANALYSIS)
-#
-#  Rationale: Biomass integrates both fish abundance and body
-#  size via length-weight relationships. Modelling counts
-#  directly allows decomposition of biomass patterns into
-#  abundance vs body size components:
-#
-#    Predictor in both biomass and count models
-#    → effect operates through fish abundance
-#
-#    Predictor in biomass but not count models
-#    → effect operates through individual body size
-#
-#    Predictor in count but not biomass models
-#    → effect on abundance is masked in biomass by
-#      compensatory changes in body size
-#
-#  This decomposition directly addresses whether MPA protection
-#  and connectivity operate through recovering fish numbers,
-#  recovering large individuals, or both.
-#
-#  Response: Total fish count per transect (integer >= 0)
-#  Family:   Poisson → NB2 → NB1 — selected via AICc + DHARMa
-#  Random fx: (1 | site)
-#  Model ladder: identical to biomass analyses for comparability
-# ============================================================
-
-# ── Explore count distribution ────────────────────────────────
-cat("Transects:", nrow(transect_model_data), "\n")
-cat("Zero counts:", sum(transect_model_data$transect_total_count == 0), "\n")
-cat("Proportion zeros:", round(mean(transect_model_data$transect_total_count == 0), 3), "\n")
-
-summary(transect_model_data$transect_total_count)
-
-ggplot(transect_model_data, aes(x = transect_total_count)) +
-  geom_histogram(bins = 50, fill = "#2c7bb6", colour = "white") +
-  labs(x = "Total fish count per transect", y = "Frequency") +
-  theme_bw()
-
-# ── Mean-variance relationship ────────────────────────────────
-transect_model_data %>%
-  group_by(site) %>%
-  summarise(mean_count = mean(transect_total_count),
-            var_count = var(transect_total_count),
-            .groups = "drop") %>%
-  ggplot(aes(x = mean_count, y = var_count)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "red") +
-  scale_x_log10() + scale_y_log10() +
-  labs(x = "Site mean count", y = "Site variance",
-       title = "Mean-variance (red = Poisson expectation)") +
-  theme_bw()
-
-# ── Family selection ──────────────────────────────────────────
-# AICc directly comparable across Poisson, NB1, NB2 (same response)
-
-m_count_poisson <- glmmTMB(
-  transect_total_count ~ rugosity_sc +
-    log_settlement_grav_sc +
-    log_chla_sc +
-    log_max_dhw_sc +
-    (1 | site),
-  family = poisson(link = "log"),
-  data = transect_model_data
-)
-
-m_count_nb2 <- glmmTMB(
-  transect_total_count ~ rugosity_sc +
-    log_settlement_grav_sc +
-    log_chla_sc +
-    log_max_dhw_sc +
-    (1 | site),
-  family = nbinom2(link = "log"),
-  data = transect_model_data
-)
-
-m_count_nb1 <- glmmTMB(
-  transect_total_count ~ rugosity_sc +
-    log_settlement_grav_sc +
-    log_chla_sc +
-    log_max_dhw_sc +
-    (1 | site),
-  family = nbinom1(link = "log"),
-  data = transect_model_data
-)
-
-res_poisson <- simulateResiduals(m_count_poisson, n = 1000)
-res_nb2 <- simulateResiduals(m_count_nb2, n = 1000)
-res_nb1 <- simulateResiduals(m_count_nb1, n = 1000)
-
-jpeg("dharma_count_poisson.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(res_poisson, main = "DHARMa — Poisson"); dev.off()
-
-jpeg("dharma_count_nb2.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(res_nb2, main = "DHARMa — NB2"); dev.off()
-
-jpeg("dharma_count_nb1.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(res_nb1, main = "DHARMa — NB1"); dev.off()
-
-plot(res_poisson); testDispersion(res_poisson); testZeroInflation(res_poisson)
-plot(res_nb2);     testDispersion(res_nb2);     testZeroInflation(res_nb2)
-plot(res_nb1);     testDispersion(res_nb1);     testZeroInflation(res_nb1)
-
-cat("\n--- Family selection: count models ---\n")
-print(make_aicc_df(list(
-  "Poisson" = m_count_poisson,
-  "NB2" = m_count_nb2,
-  "NB1" = m_count_nb1
-)))
-
-# ── Family selection decision ───────────────────────────────── update specifics...
-# NB2 selected — confirmed by both AICc and DHARMa diagnostics.
-#
-# Poisson (image 1): rejected decisively
-#   KS test p = 0.0002, dispersion p = 0.006, outlier p = 0
-#   Dispersion = 2.20 — severe overdispersion
-#   QQ plot shows systematic deviation throughout
-#   Residuals vs predicted shows strong quantile violations
-#
-# NB2 (image 2): selected
-#   KS p = 0.952, dispersion p = 0.848, outlier p = 0.98
-#   All tests n.s. — no significant problems detected
-#   Dispersion = 1.005 — near perfect
-#   QQ plot closely follows theoretical line
-#   Residuals vs predicted flat with no systematic pattern
-#   Zero inflation: NaN p = 1 — no zero inflation present
-#
-# NB1 (image 3): adequate but inferior to NB2
-#   KS p = 0.659, dispersion p = 0.174, outlier p = 0.32
-#   Formal tests pass but residuals vs predicted shows
-#   quantile deviations flagged by DHARMa — upper and lower
-#   quantile curves show systematic pattern not present in NB2
-#   AICc delta = 4.48 vs NB2 — not competitive
-#
-# Proceed with nbinom2(link = "log") + (1 | site) throughout
-# count analyses.
-
-# ── RE structure ──────────────────────────────────────────────
-# (1 | site) tested against no random effect structure
-# Test confirms this is strongly supported.
-re_c_null <- glmmTMB(transect_total_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
-                       log_chla_sc +
-                       log_max_dhw_sc,
-                     family = nbinom2(link = "log"),
-                     data = transect_model_data)
-
-re_c_site <- glmmTMB(transect_total_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
-                       log_chla_sc +
-                       log_max_dhw_sc +
-                       (1 | site),
-                     family = nbinom2(link = "log"),
-                     data = transect_model_data)
-
-cat("\n--- RE structure: count models ---\n")
-print(make_aicc_df(list(
-  "No RE" = re_c_null,
-  "(1 | site)" = re_c_site
-)))
-
-# ── RE structure decision ─────────────────────────────────────
-# (1 | site) strongly supported (difference in AICc = 27.73, weight = 1.00).
-# Even stronger site-level clustering in counts than in biomass
-# (delta 27.73 vs 9.89) — fish counts are more variable within
-# sites than biomass, making the site random effect essential.
-# Proceed with (1 | site) throughout count analyses.
-
-# ── Candidate models — identical ladder to biomass ────────────
-count_family <- nbinom2(link = "log")
-
-# Model 1: Habitat only
-count_m1_hab <- glmmTMB(transect_total_count ~ rugosity_sc +
-                      (1 | site),
-                    family = count_family, data = transect_model_data)
-
-# Model 2: Habitat + pressure
-count_m2_hab_press <- glmmTMB(transect_total_count ~ rugosity_sc +
-                            log_settlement_grav_sc +
-                            (1 | site),
-                          family = count_family, data = transect_model_data)
-
-# Model 3: Habitat + pressure + MPA
-count_m3_hab_press_mpa <- glmmTMB(transect_total_count ~ rugosity_sc +
-                                log_settlement_grav_sc +
-                                mpa_status +
-                                (1 | site),
-                              family = count_family, data = transect_model_data)
-
-# Model 4: Above + connectivity
-count_m4_conn <- glmmTMB(transect_total_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
-                       mpa_status +
-                       connectivity_sc +
-                       (1 | site),
-                     family = count_family, data = transect_model_data)
-
-# Model 5: Above + chla
-count_m5_chla <- glmmTMB(transect_total_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
-                       mpa_status +
-                       connectivity_sc +
-                       log_chla_sc +
-                       (1 | site),
-                     family = count_family, data = transect_model_data)
-
-# Model 6: Above + DHW
-count_m6_dhw <- glmmTMB(transect_total_count ~ rugosity_sc +
-                      log_settlement_grav_sc +
-                      mpa_status +
-                      connectivity_sc +
-                      log_max_dhw_sc +
-                      (1 | site),
-                    family = count_family, data = transect_model_data)
-
-# Model 7: MPA x connectivity
-count_m7_mpa_conn <- glmmTMB(transect_total_count ~ rugosity_sc +
-                           log_settlement_grav_sc +
-                           mpa_status * connectivity_sc +
-                           (1 | site),
-                         family = count_family, data = transect_model_data)
-
-# Model 8: MPA x pressure
-count_m8_mpa_press <- glmmTMB(transect_total_count ~ rugosity_sc +
-                            mpa_status * log_settlement_grav_sc +
-                            connectivity_sc +
-                            (1 | site),
-                          family = count_family, data = transect_model_data)
-
-# Model 9: Connectivity x pressure
-count_m9_conn_press <- glmmTMB(transect_total_count ~ rugosity_sc +
-                             mpa_status +
-                             connectivity_sc * log_settlement_grav_sc +
-                             (1 | site),
-                           family = count_family, data = transect_model_data)
-
-# Sensitivity
-c_sens_settpop <- glmmTMB(transect_total_count ~ rugosity_sc +
-                            log_settlement_pop_sc +
-                            mpa_status +
-                            connectivity_sc +
-                            (1 | site),
-                          family = count_family, data = transect_model_data)
-
-c_sens_mktgrav <- glmmTMB(transect_total_count ~ rugosity_sc +
-                            log_market_gravity_sc +
-                            mpa_status +
-                            connectivity_sc +
-                            (1 | site),
-                          family = count_family, data = transect_model_data)
-
-# ── Model list ────────────────────────────────────────────────
-model_list_counts <- list(
-  "Habitat" = count_m1_hab,
-  "Habitat + pressure" = count_m2_hab_press,
-  "Habitat + pressure + MPA" = count_m3_hab_press_mpa,
-  "Above + connectivity" = count_m4_conn,
-  "Above + chla" = count_m5_chla,
-  "Above + DHW" = count_m6_dhw,
-  "MPA x connectivity" = count_m7_mpa_conn,
-  "MPA x pressure" = count_m8_mpa_press,
-  "Connectivity x pressure" = count_m9_conn_press,
-  "Settlement pop. (sensitivity)" = c_sens_settpop,
-  "Market gravity (sensitivity)" = c_sens_mktgrav
-)
-
-cat("\n--- AICc: Count models ---\n")
-print(make_aicc_df(model_list_counts))
-
-# ── Count model results ───────────────────────────────────────
-#
-#                         Model   AICc Delta Weight
-#                   Above + DHW 2481.03  0.00  0.21
-#  Market gravity (sensitivity) 2481.08  0.05  0.21
-# Settlement pop. (sensitivity) 2481.71  0.68  0.15
-#      Habitat + pressure + MPA 2481.82  0.79  0.14
-#          Above + connectivity 2482.44  1.40  0.11
-#       Connectivity x pressure 2484.08  3.05  0.05
-#                       Habitat 2484.39  3.35  0.04
-#                  Above + chla 2484.57  3.54  0.04
-#            MPA x connectivity 2485.18  4.14  0.03
-#              Habitat + pressure 2486.32  5.29  0.02
-#                  MPA x pressure 2486.36  5.33  0.01
-#
-# STRIKING DIVERGENCE FROM BIOMASS ANALYSES:
-#
-# 1. HABITAT + PRESSURE is no longer the best model — it sits
-#    at delta 5.29, essentially unsupported for counts.
-#    This is the opposite of biomass where it was best by far.
-#
-# 2. DHW is the best-supported predictor for counts (delta 0.00)
-#    but was not supported for biomass (delta 4.27 at site level).
-#    Thermal stress appears to operate primarily through fish
-#    abundance rather than body size — bleaching events reduce
-#    fish numbers without necessarily reducing the size of
-#    remaining individuals.
-#
-# 3. SENSITIVITY METRICS (market gravity, settlement pop.) are
-#    within delta < 2 for counts but not for biomass — the
-#    choice of pressure metric matters more for abundance than
-#    for biomass. This may reflect that different pressure types
-#    (market access vs local settlement) target different
-#    components of the fish community.
-#
-# 4. MPA STATUS has marginal support as a main effect (delta 0.79)
-#    — some evidence protection increases fish numbers.
-#
-# 5. MPA INTERACTIONS not supported for counts (delta > 4) —
-#    the MPA x pressure interaction that was prominent in
-#    biomass analyses does not appear in counts. This suggests
-#    the interaction operates primarily through body size
-#    recovery rather than abundance recovery at protected sites.
-#
-# 6. RUGOSITY is not driving counts as strongly as biomass —
-#    habitat complexity appears to support larger-bodied fish
-#    rather than simply more fish, consistent with the idea
-#    that structural complexity provides refuge for large
-#    individuals rather than increasing total recruitment.
-#
-# KEY BIOLOGICAL INTERPRETATION:
-#   Biomass and abundance are structured by fundamentally
-#   different processes in this system:
-#   - Biomass: driven by habitat complexity and human pressure,
-#     with MPA x pressure interaction suggesting protection
-#     modifies the pressure-body size relationship
-#   - Abundance: driven by thermal stress and MPA status,
-#     suggesting fish numbers respond to disturbance history
-#     and protection independently of habitat structure
-#   This decomposition suggests MPAs recover fish communities
-#   primarily through protecting individual body size rather
-#   than increasing total fish numbers — consistent with
-#   size-selective fishing pressure targeting large individuals.
-
-# ============================================================
-#  SYNTHESIS: BIOMASS vs COUNT MODEL CONCLUSIONS - update...
-#
-#  Site-level biomass best models (delta < 2):
-#    1. Habitat + pressure (weight 0.31)
-#    2. MPA x pressure (weight 0.18)
-#
-#  Transect-level biomass best models (delta < 2):
-#    1. Habitat + pressure (weight 0.33)
-#    2. MPA x connectivity (weight 0.14)
-#    3. Above + chla (weight 0.13)
-#
-#  Count models best models (delta < 2):
-#    1. Above + DHW (weight 0.21)
-#    2. Market gravity sensitivity (weight 0.21)
-#    3. Settlement pop. sensitivity (weight 0.15)
-#    4. Habitat + pressure + MPA (weight 0.14)
-#    5. Above + connectivity (weight 0.11)
-#
-#  Key finding: biomass and abundance are structured by
-#  fundamentally different processes — the dominant predictors
-#  for each response do not overlap.
-# ============================================================
-
-# ── Rugosity ──────────────────────────────────────────────────
-# Extract rugosity coefficients across all analyses
-rug_site     <- coef(s1_m2_hab_press)["rugosity_sc"]
-rug_transect <- fixef(t_m2_hab_press)$cond["rugosity_sc"]
-rug_count    <- fixef(c_m4_conn)$cond["rugosity_sc"]
-
-cat("\n--- Rugosity effect across analyses ---\n")
-cat("Site biomass:      beta =", round(rug_site, 3), "\n")
-cat("Transect biomass:  beta =", round(rug_transect, 3), "\n")
-cat("Counts:            beta =", round(rug_count, 3),
-    " IRR =", round(exp(rug_count), 3), "\n")
-
-# Rugosity beta for biomass > counts at both levels — complex
-# reefs support larger-bodied fish, not just more fish.
-# Structural complexity provides refuge for large individuals
-# rather than simply increasing total recruitment.
-
-# ── Human pressure ────────────────────────────────────────────
-press_site     <- coef(s1_m2_hab_press)["log_settlement_grav_sc"]
-press_transect <- fixef(t_m2_hab_press)$cond["log_settlement_grav_sc"]
-press_count    <- fixef(c_m4_conn)$cond["log_settlement_grav_sc"]
-
-cat("\n--- Human pressure (settlement gravity) ---\n")
-cat("Site biomass:      beta =", round(press_site, 3), "\n")
-cat("Transect biomass:  beta =", round(press_transect, 3), "\n")
-cat("Counts:            beta =", round(press_count, 3),
-    " IRR =", round(exp(press_count), 3), "\n")
-
-# Habitat + pressure is the best biomass model at both levels
-# but sits at delta 5.29 for counts — pressure operates
-# primarily through body size reduction (size-selective
-# harvesting removes large individuals) rather than through
-# reducing total fish numbers.
-
-# ── MPA effects ───────────────────────────────────────────────
-cat("\n--- MPA effects ---\n")
-cat("Site biomass — MPA x pressure: delta AICc = 1.10 (within delta 2)\n")
-cat("Transect biomass — MPA x connectivity: delta AICc = 1.74 (within delta 2)\n")
-cat("Counts — MPA main effect: delta AICc = 0.79 (within delta 2)\n")
-cat("Counts — MPA x pressure: delta AICc = 5.33 (not supported)\n")
-cat("Counts — MPA x connectivity: delta AICc = 4.14 (not supported)\n")
-
-# MPA interactions supported in biomass but not counts —
-# protection appears to operate primarily through recovering
-# individual body size rather than fish numbers. The MPA x
-# pressure interaction in biomass suggests medium-protection
-# sites buffer the negative body size effects of fishing
-# pressure. The absence of this interaction in counts confirms
-# the effect is on size structure not abundance.
-
-# ── DHW ───────────────────────────────────────────────────────
-cat("\n--- Thermal stress (DHW) ---\n")
-cat("Site biomass:      delta AICc = 2.47 (marginal)\n")
-cat("Transect biomass:  delta AICc = 4.27 (not supported)\n")
-cat("Counts:            delta AICc = 0.00 (BEST MODEL)\n")
-
-# DHW is the best predictor for counts but not for biomass —
-# thermal stress reduces fish numbers without proportionally
-# reducing total biomass. Bleaching events may remove small
-# and large fish equally in terms of numbers, but surviving
-# fish (or recruits) maintain community biomass through
-# compensatory growth or community restructuring.
-
-# ── Connectivity ──────────────────────────────────────────────
-cat("\n--- Connectivity ---\n")
-cat("Site biomass — MPA x connectivity: delta AICc = 2.05 (marginal)\n")
-cat("Transect biomass — MPA x connectivity: delta AICc = 1.74 (within delta 2)\n")
-cat("Counts — connectivity main effect: delta AICc = 1.40 (within delta 2)\n")
-
-# Connectivity appears in the top model sets for both biomass
-# and counts but in different forms — as an interaction with
-# MPA status for biomass (medium-protection sites benefit more
-# from connectivity) and as a main effect for counts (more
-# connected sites have higher fish numbers regardless of
-# protection). This suggests connectivity supports fish
-# abundance generally via larval supply, while its biomass
-# effect is contingent on protection status.
-
-# ── Overall synthesis ─────────────────────────────────────────
-cat("\n--- Overall synthesis ---\n")
-cat("
-Biomass is primarily structured by local habitat complexity
-and human pressure, with MPA protection modifying the
-pressure-biomass relationship — particularly at medium-
-protection sites where the negative pressure effect on
-body size is attenuated or reversed.
-
-Fish abundance is primarily structured by thermal stress
-history and MPA status, with connectivity providing
-additional larval supply benefits. The absence of MPA
-interactions in count models suggests protection operates
-through recovering individual body size rather than
-increasing total fish numbers.
-
-Together these results indicate that reef fish community
-recovery under protection is a body-size mediated process:
-MPAs protect large individuals from size-selective fishing
-pressure, generating biomass recovery that is not detectable
-as an increase in total fish numbers. Connectivity amplifies
-this effect at medium-protection sites by maintaining larval
-supply to recovering reefs.
-")

@@ -1,113 +1,49 @@
 # ============================================================
-#  BROWSER BIOMASS & ABUNDANCE — MIXED EFFECTS MODELS
+#  BROWSER FISH BIOMASS — SITE-LEVEL ANALYSIS
+#
+#  Analytical framework mirrors total biomass (four stages):
+#
+#  STAGE 1 — Variance partitioning
+#             Quantifies unique and shared variance attributable
+#             to local ecological, spatial, and environmental
+#             process groups. MPA status excluded (governance
+#             variable — tested separately in Stage 2).
+#
+#  STAGE 2 — Hierarchical model comparison
+#             Nested model sequence adds process groups
+#             progressively. Tests incremental explanatory value
+#             of each group beyond the local baseline.
+#
+#  STAGE 3 — Interaction testing (conditional on Stage 2)
+#             Three a priori interactions test whether spatial
+#             management and connectivity modify local-scale
+#             relationships.
+#
+#  STAGE 4 — Sensitivity analysis
+#             (a) Alternative pressure metrics
+#             (b) Transect-level mixed model replication
+#
+#  Key difference from total biomass:
+#    Browser biomass has ~11% zeros at site level and ~43%
+#    at transect level. Family selection therefore tests
+#    Tweedie in addition to Gaussian log. If Tweedie is
+#    selected, varpart is not directly available (vegan::varpart
+#    requires lm-compatible models). In that case Stage 1 is
+#    approximated using pseudo-R² from glmmTMB models.
+#    See family selection decision below.
 #
 #  Study design:
-#    Transects nested within stations, stations within sites,
-#    sites within locations, locations within countries.
-#
-#  Predictors measured at site level (averaged from station):
-#    Chl-a, DHW, Human gravity (market / settlement),
-#    Rugosity, Connectivity, MPA status
-#
-#  Analytical structure:
-#    PART 1 — Site-level analysis (PRIMARY)
-#              Matches response resolution to predictor resolution.
-#              Sites are the true unit of environmental inference.
-#
-#    PART 2 — Transect-level biomass (SENSITIVITY CHECK)
-#              Retains within-site variation; (1 | site) accounts
-#              for non-independence. Confirms site-level findings
-#              are not an artefact of averaging.
-#              NOTE: check zero proportion — may require Tweedie.
-#
-#    PART 3 — Transect-level counts (COMPLEMENTARY ANALYSIS)
-#              Models the raw data-generating process (discrete
-#              counts) rather than derived biomass. Negative
-#              Binomial family. Allows detection of whether
-#              predictor effects operate through abundance,
-#              body size, or both.
+#    243 transects, 54 sites, 4 countries.
+#    Minimum 3 transects per site retained.
 # ============================================================
 
-options(scipen = 999)
+# ── SOURCE SHARED DATA PREPARATION ───────────────────────────
+# # Loads: fish_data, scaled_predictors, final_predictors,
+# total_transects, transect_model_data, total_model_data,
+# make_aicc_df(), plot_effect(), and all packages.
+source(here::here("data_preparation.R"))
 
-# ── PACKAGES ─────────────────────────────────────────────────
-library(tidyverse)
-library(sf)
-library(glmmTMB)
-library(DHARMa)
-library(MuMIn)
-library(AICcmodavg)
-library(ggcorrplot)
-library(corrplot)
-library(gridExtra)
-library(MASS)
-library(here)
-
-# ── LOAD ALL DATA ─────────────────────────────────────────────
-fish_data <- readr::read_rds(here::here("processed_data", "clean_fish_connectivity.rds"))
-gravity_data <- readr::read_rds(here::here("city_data", "locations_with_grav_combined.rds"))
-chla_data <- read.csv(here::here("processed_data", "locations_with_chla_2009.csv"))
-dhw_data <- readr::read_rds(here::here("processed_data", "locations_with_dhw_2009.rds"))
-rugosity_data <- readr::read_rds(here::here("processed_data", "clean_dive_details_connectivity.rds"))
-location_data <- readr::read_rds(here::here("processed_data", "clean_location_connectivity.rds"))
-
-# ── FUNCTIONS ─────────────────────────────────────────────────
-
-make_aicc_df <- function(model_list) {
-  aicc_v <- sapply(model_list, AICc)
-  delta_v <- aicc_v - min(aicc_v)
-  wt_v <- exp(-0.5 * delta_v) / sum(exp(-0.5 * delta_v))
-  data.frame(
-    Model = names(model_list),
-    AICc = round(aicc_v, 2),
-    Delta = round(delta_v, 2),
-    Weight = round(wt_v, 4),
-    row.names = NULL
-  ) %>% arrange(AICc)
-}
-
-plot_effect <- function(model, data, focal_var,
-                        x_label,
-                        y_label = "Fitted value",
-                        colour = "#2c7bb6",
-                        n = 200) {
-  scaled_vars <- names(data)[endsWith(names(data), "_sc")]
-  grid <- as.data.frame(
-    matrix(0, nrow = n, ncol = length(scaled_vars),
-           dimnames = list(NULL, scaled_vars))
-  )
-  grid[[focal_var]] <- seq(
-    min(data[[focal_var]], na.rm = TRUE),
-    max(data[[focal_var]], na.rm = TRUE),
-    length.out = n
-  )
-  if (inherits(model, "glmmTMB") && "site" %in% names(data)) {
-    grid$site <- levels(data$site)[1]
-  }
-  is_lm <- inherits(model, "lm") && !inherits(model, "glmmTMB")
-  pred <- if (is_lm) {
-    predict(model, newdata = grid, se.fit = TRUE)
-  } else {
-    predict(model, newdata = grid, type = "response",
-            se.fit = TRUE, re.form = NA)
-  }
-  grid$fit <- pred$fit
-  grid$lwr <- pred$fit - 1.96 * pred$se.fit
-  grid$upr <- pred$fit + 1.96 * pred$se.fit
-  ggplot(grid, aes(x = .data[[focal_var]])) +
-    geom_ribbon(aes(ymin = lwr, ymax = upr),
-                fill = colour, alpha = 0.2) +
-    geom_line(aes(y = fit), colour = colour, linewidth = 1.1) +
-    labs(x = x_label, y = y_label) +
-    theme_bw(base_size = 13) +
-    theme(axis.title = element_text(face = "bold"))
-}
-
-# ==============================================================================
-#  AGGREGATE TRANSECT DATA
-#  Minimum of 3 transects per site.
-# ==============================================================================
-
+# ── AGGREGATE BROWSER TRANSECT DATA ──────────────────────
 browser_transects <- fish_data %>%
   group_by(site, station, ts_no, date) %>%
   summarise(
@@ -126,824 +62,1058 @@ browser_transects <- fish_data %>%
   filter(n() >= 3) %>%
   ungroup() %>%
   mutate(
-    site = as.factor(site),
+    site    = as.factor(site),
     country = as.factor(country)
   )
 
-cat("Number of transects:", nrow(browser_transects), "\n")
-cat("Number of sites:", n_distinct(browser_transects$site), "\n")
-cat("Number of countries:", n_distinct(browser_transects$country), "\n")
+cat("Browser transects:", nrow(browser_transects), "\n")
+cat("Sites:",                 n_distinct(browser_transects$site), "\n")
+cat("Countries:",             n_distinct(browser_transects$country), "\n")
 
-# ==============================================================================
-#  BIOMASS DATA EXPLORATION
-# ==============================================================================
-
-site_data <- browser_transects %>%
+# ── SITE-LEVEL AGGREGATION ────────────────────────────────────
+browser_site_data <- browser_transects %>%
   group_by(site, country) %>%
   summarise(
     mean_biomass = mean(transect_browser_biomass, na.rm = TRUE),
-    n_transects = n(),
-    .groups = "drop"
+    n_transects  = n(),
+    .groups      = "drop"
   ) %>%
   mutate(
-    site = as.factor(site),
+    site    = as.factor(site),
     country = as.factor(country)
   )
 
-summary(site_data$mean_biomass)
+# ── Zero check ────────────────────────────────────────────────
+zeros_site <- mean(browser_site_data$mean_biomass == 0, na.rm = TRUE)
+cat("Site-level zero proportion:", round(zeros_site, 3), "\n")
+# If > 0: log(x + offset) required for Gaussian
+# If substantial (> 0.15): Tweedie warranted
 
-zeros <- mean(site_data$mean_biomass == 0, na.rm = TRUE)
-cat("Proportion of zeros:", round(zeros, 3), "\n")
+# ── Distribution plots ────────────────────────────────────────
+p_raw <- ggplot(browser_site_data, aes(x = mean_biomass)) +
+  geom_histogram(bins = 30, fill = "#2c7bb6", colour = "white") +
+  labs(x = "Mean browser biomass per site (g)", y = "Frequency",
+       title = "Raw") + theme_bw()
 
-(site_raw <- ggplot(site_data, aes(x = mean_biomass)) +
-    geom_histogram(bins = 30, fill = "#2c7bb6", colour = "white") +
-    labs(x = "Mean browser biomass per site (g)", y = "Frequency",
-         title = "Raw Site-Level Browser Biomass") +
-    theme_bw())
+# Apply log(x + 0.01) transformation — offset chosen as 1%
+# of minimum non-zero value to minimise distortion
+browser_site_data <- browser_site_data %>%
+  mutate(log_mean_biomass = log(mean_biomass + 0.01))
 
-site_nonzero <- site_data %>% filter(mean_biomass > 0)
+p_log <- ggplot(browser_site_data, aes(x = log_mean_biomass)) +
+  geom_histogram(bins = 25, fill = "#1a9641", colour = "white") +
+  labs(x = "log(mean biomass + 0.01)", y = "Frequency",
+       title = "Log-transformed") + theme_bw()
 
-MASS::boxcox(
-  lm(mean_biomass ~ 1, data = site_nonzero),
-  lambda = seq(-2, 2, 0.1)
-)
+gridExtra::grid.arrange(p_raw, p_log, ncol = 2)
 
-site_data <- site_data %>%
-  mutate(
-    log_mean_biomass = log(mean_biomass + 0.01),
-    sqrt_mean_biomass = sqrt(mean_biomass)
-  )
+# ── Distribution decision ─────────────────────────────────────
+# Log-transformed distribution is bimodal — 6 zero sites
+# (11%) form an isolated cluster at log(0.01) = -4.6,
+# separated from the main distribution by a gap of ~10 log
+# units. This pattern is invariant to the choice of offset
+# constant: no log transformation can bridge the gap between
+# genuine absence and presence because the two states are
+# biologically distinct, not simply different points on a
+# continuous scale. A tweedie model will liekly be needed.
 
-(site_log <- ggplot(site_data, aes(x = log_mean_biomass)) +
-    geom_histogram(bins = 25, fill = "#1a9641", colour = "white") +
-    labs(x = "log(mean biomass + 0.01)", y = "Frequency",
-         title = "Log-transformed") +
-    theme_bw())
+# ── Box-Cox on non-zero values ────────────────────────────────
+browser_nonzero <- browser_site_data %>% filter(mean_biomass > 0)
+MASS::boxcox(lm(mean_biomass ~ 1, data = browser_nonzero),
+             lambda = seq(-2, 2, 0.1))
 
-(site_sqrt <- ggplot(site_data, aes(x = sqrt_mean_biomass)) +
-    geom_histogram(bins = 25, fill = "#d7191c", colour = "white") +
-    labs(x = "sqrt(mean biomass)", y = "Frequency",
-         title = "Sqrt-transformed") +
-    theme_bw())
 
-jpeg("site_browser_biomass_distributions.jpg", width = 33, height = 11,
-     units = "cm", res = 300)
-gridExtra::grid.arrange(site_raw, site_log, site_sqrt, ncol = 3)
-dev.off()
+# ── Build full browser site-level model dataset ───────────────
+# Uses scaled_predictors from total biomass preparation —
+# predictors are identical across functional groups.
+# MPA status: unordered factor, reference = "none"
 
-qqnorm(site_data$log_mean_biomass,
-       main = "Q-Q plot: log(mean browser biomass per site)")
-qqline(site_data$log_mean_biomass, col = "red")
-shapiro.test(site_data$log_mean_biomass)
-
-ggplot(site_data, aes(x = reorder(site, mean_biomass, median),
-                      y = mean_biomass)) +
-  geom_col(fill = "#2c7bb6", alpha = 0.7) +
-  coord_flip() +
-  labs(x = NULL, y = "Mean browser biomass (g)",
-       title = "Mean browser biomass by site") +
-  theme_bw(base_size = 9)
-
-ggplot(site_data, aes(x = country, y = log_mean_biomass)) +
-  geom_boxplot(outlier.shape = NA, fill = "grey92",
-               colour = "grey40", linewidth = 0.4, width = 0.4) +
-  geom_jitter(width = 0.15, size = 2, alpha = 0.7,
-              colour = "#2c7bb6") +
-  geom_hline(yintercept = mean(site_data$log_mean_biomass),
-             linetype = "dashed", colour = "grey50", linewidth = 0.4) +
-  scale_x_discrete(labels = stringr::str_to_title) +
-  labs(x = NULL, y = "log(mean browser biomass per site + 0.01)") +
-  theme_bw(base_size = 11) +
-  theme(
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text.x = element_text(face = "bold")
-  )
-
-site_data %>%
-  dplyr::select(site, country, n_transects, mean_biomass) %>%
-  arrange(desc(mean_biomass)) %>%
-  print(n = Inf)
-
-# ============================================================
-#  PREDICTOR PREPARATION
-# ============================================================
-
-gravity_sites <- gravity_data %>%
-  st_drop_geometry() %>%
-  group_by(site) %>%
-  summarise(
-    market_gravity = mean(market_grav, na.rm = TRUE),
-    settlement_pop = mean(settlement_tot_pop, na.rm = TRUE),
-    settlement_grav = mean(nearest_pop75_grav, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-chla_sites <- chla_data %>%
-  group_by(site) %>%
-  summarise(mean_annual_chla = mean(chla_annual_mean, na.rm = TRUE),
-            .groups = "drop")
-
-dhw_sites <- dhw_data %>%
-  filter(!is.na(max_dhw)) %>%
-  group_by(site) %>%
-  summarise(max_annual_dhw = max(max_dhw, na.rm = TRUE),
-            .groups = "drop")
-
-rugosity_sites <- rugosity_data %>%
-  group_by(site) %>%
-  summarise(rugosity = mean(rugosity, na.rm = TRUE),
-            .groups = "drop")
-
-location_sites <- location_data %>%
-  mutate(site = as.character(site)) %>%
-  group_by(site) %>%
-  summarise(
-    mpa_status = first(mpa_status),
-    connectivity = mean(prop_connectivity, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# ============================================================
-#  TRANSFORMATIONS AND CHECKS
-# ============================================================
-
-raw_predictors <- location_sites %>%
-  left_join(chla_sites, by = "site") %>%
-  left_join(dhw_sites, by = "site") %>%
-  left_join(rugosity_sites, by = "site") %>%
-  left_join(gravity_sites, by = "site")
-
-transformed_predictors <- raw_predictors %>%
-  transmute(
-    site = site,
-    log_market_gravity = log(market_gravity),
-    log_settlement_grav = log(settlement_grav),
-    log_settlement_pop = log(settlement_pop),
-    log_chla = log(mean_annual_chla),
-    log_max_dhw = log(max_annual_dhw + 1),
-    rugosity = rugosity,
-    connectivity = connectivity,
-    mpa_status = mpa_status
-  )
-
-scaled_predictors <- transformed_predictors %>%
-  transmute(
-    site = site,
-    rugosity_sc = as.numeric(scale(rugosity)),
-    log_settlement_grav_sc = as.numeric(scale(log_settlement_grav)),
-    connectivity_sc = as.numeric(scale(connectivity)),
-    log_chla_sc = as.numeric(scale(log_chla)),
-    log_max_dhw_sc = as.numeric(scale(log_max_dhw)),
-    log_market_gravity_sc = as.numeric(scale(log_market_gravity)),
-    log_settlement_pop_sc = as.numeric(scale(log_settlement_pop)),
-    mpa_status = mpa_status
-  )
-
-# ============================================================
-#  CHOOSING SETTLEMENT METRIC
-# ============================================================
-
-settlement_data <- browser_transects %>%
-  left_join(scaled_predictors, by = "site") %>%
-  group_by(site) %>%
-  summarise(
-    mean_browser_biomass = mean(transect_browser_biomass, na.rm = TRUE),
-    log_settlement_grav_sc = first(log_settlement_grav_sc),
-    log_settlement_pop_sc = first(log_settlement_pop_sc),
-    log_market_gravity_sc = first(log_market_gravity_sc),
-    .groups = "drop"
-  )
-
-make_aicc_df(list(
-  "Settlement gravity" = glmmTMB(mean_browser_biomass ~ log_settlement_grav_sc,
-                                 family = tweedie(link = "log"), data = settlement_data),
-  "Settlement pop." = glmmTMB(mean_browser_biomass ~ log_settlement_pop_sc,
-                              family = tweedie(link = "log"), data = settlement_data),
-  "Market gravity" = glmmTMB(mean_browser_biomass ~ log_market_gravity_sc,
-                             family = tweedie(link = "log"), data = settlement_data)
-))
-
-# ── Decision — browser settlement metric ───────────────────── fix this...
-# Settlement gravity reinstated as primary metric for browsers.
-#
-# Single-predictor AICc comparison:
-#   Settlement pop.:    AICc = 835.14, weight = 0.88
-#   Settlement gravity: delta = 5.11, weight = 0.07
-#   Market gravity:     delta = 5.72, weight = 0.05
-#
-# Settlement pop. won the single-predictor comparison but
-# produced high model uncertainty in the full candidate set
-# (6 models within delta < 2, no dominant model, MPA x
-# pressure drops to delta 5.29 — the primary management
-# finding disappears entirely).
-#
-# Settlement gravity produces a cleaner, more interpretable
-# result in the full analysis — MPA x pressure dominant
-# (weight = 0.74, sole model within delta < 2) — and is
-# consistent with total biomass analyses.
-#
-# Single-predictor metric selection does not always predict
-# which metric performs best within a full model ladder
-# including interactions. The full candidate set result
-# takes precedence over the single-predictor comparison.
-#
-# Primary metric:   log_settlement_grav_sc
-# Sensitivity only: log_settlement_pop_sc, log_market_gravity_sc
-
-rm(settlement_data)
-
-# ============================================================
-#  ANALYSIS DATASETS
-# ============================================================
-
-final_predictors <- scaled_predictors %>%
-  dplyr::select(
-    site,
-    rugosity_sc,
-    log_settlement_grav_sc, # PRIMARY for browsers
-    connectivity_sc,
-    mpa_status,
-    log_chla_sc,
-    log_max_dhw_sc,
-    log_settlement_pop_sc, # SENSITIVITY
-    log_market_gravity_sc # SENSITIVITY
-  )
-
-transect_model_data <- browser_transects %>%
+browser_model_data <- browser_transects %>%
   left_join(final_predictors, by = "site") %>%
-  mutate(log_browser_biomass = log(transect_browser_biomass + 0.01))
-
-cat("\nTransect model data:", nrow(transect_model_data), "rows,",
-    n_distinct(transect_model_data$site), "sites\n")
-cat("Biomass zeros:", sum(transect_model_data$transect_browser_biomass == 0), "\n")
-cat("Count zeros:", sum(transect_model_data$transect_browser_count == 0), "\n")
-
-total_model_data <- transect_model_data %>%
   group_by(site, country) %>%
   summarise(
-    mean_biomass = mean(transect_browser_biomass, na.rm = TRUE),
-    log_mean_biomass = log(mean(transect_browser_biomass, na.rm = TRUE) + 0.01),
-    n_transects = n(),
-    rugosity_sc = first(rugosity_sc),
+    mean_biomass           = mean(transect_browser_biomass, na.rm = TRUE),
+    log_mean_biomass       = log(mean(transect_browser_biomass,
+                                      na.rm = TRUE) + 0.01),
+    n_transects            = n(),
+    rugosity_sc            = first(rugosity_sc),
     log_settlement_grav_sc = first(log_settlement_grav_sc),
-    connectivity_sc = first(connectivity_sc),
-    mpa_status = first(mpa_status),
-    log_chla_sc = first(log_chla_sc),
-    log_max_dhw_sc = first(log_max_dhw_sc),
-    log_settlement_pop_sc = first(log_settlement_pop_sc),
-    log_market_gravity_sc = first(log_market_gravity_sc),
+    connectivity_sc        = first(connectivity_sc),
+    mpa_status             = first(mpa_status),
+    log_chla_sc            = first(log_chla_sc),
+    log_max_dhw_sc         = first(log_max_dhw_sc),
+    log_settlement_pop_sc  = first(log_settlement_pop_sc),
+    log_market_gravity_sc  = first(log_market_gravity_sc),
     .groups = "drop"
   ) %>%
   mutate(
-    site = as.factor(site),
-    country = as.factor(country)
+    site    = as.factor(site),
+    country = as.factor(country),
+    mpa_status = factor(mpa_status,
+                        levels  = c("none", "low", "medium"),
+                        ordered = FALSE)
   )
 
-cat("\nSite model data:", nrow(total_model_data), "sites,",
-    n_distinct(total_model_data$country), "countries\n")
-cat("Site-level zeros:", sum(total_model_data$mean_biomass == 0), "\n")
+cat("\nBrowser model data:", nrow(browser_model_data), "sites\n")
+cat("Site-level zeros:",   sum(browser_model_data$mean_biomass == 0), "\n")
 
-total_model_data %>%
+# ── Verify no NAs ─────────────────────────────────────────────
+browser_model_data %>%
   dplyr::select(site, rugosity_sc, log_settlement_grav_sc,
-                connectivity_sc, mpa_status, log_chla_sc,
-                log_max_dhw_sc) %>%
+                connectivity_sc, mpa_status,
+                log_chla_sc, log_max_dhw_sc) %>%
   filter(if_any(everything(), is.na)) %>%
   print(n = Inf)
 
-# ============================================================
-#  PART 1 — SITE-LEVEL ANALYSIS (PRIMARY)
-# ============================================================
+# ── Check zeros and response ──────────────────────────────────
+cat("Zeros in mean_biomass:",       sum(browser_model_data$mean_biomass == 0), "\n")
+cat("-Inf in log_mean_biomass:",    sum(is.infinite(browser_model_data$log_mean_biomass)), "\n")
+cat("NAs in log_mean_biomass:",     sum(is.na(browser_model_data$log_mean_biomass)), "\n")
+cat("\nResponse summary:\n")
+print(summary(browser_model_data$log_mean_biomass))
 
-# ── Family selection ──────────────────────────────────────────
-# Tweedie appropriate given continuous positive response with zeros.
-# ZI Tweedie not tested at site level — see decision below.
 
-m_gaussian_log <- glmmTMB(log_mean_biomass ~ rugosity_sc +
-                            log_settlement_grav_sc +
-                            log_chla_sc +
-                            log_max_dhw_sc,
-                          family = gaussian(), data = total_model_data)
-
-m_tweedie <- glmmTMB(mean_biomass ~ rugosity_sc +
-                       log_settlement_grav_sc +
-                       log_chla_sc +
-                       log_max_dhw_sc,
-                     family = tweedie(link = "log"), data = total_model_data)
-
-res_gaussian <- simulateResiduals(m_gaussian_log, n = 1000)
-res_tweedie <- simulateResiduals(m_tweedie, n = 1000)
-
-jpeg("diagnostics_site_browser_gaussian.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(res_gaussian, main = "DHARMa — Gaussian on log(y + 0.01)"); dev.off()
-
-jpeg("diagnostics_site_browser_tweedie.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(res_tweedie, main = "DHARMa — Tweedie"); dev.off()
-
-plot(res_gaussian); testZeroInflation(res_gaussian); testDispersion(res_gaussian)
-plot(res_tweedie); testZeroInflation(res_tweedie); testDispersion(res_tweedie)
-
-# ── Family selection decision ─────────────────────────────────
-# Tweedie selected for consistency across functional groups.
-#
-# Gaussian: dispersion = 1.016, p = 0.910 — near perfect
-# Tweedie:  dispersion = 1.728, p = 0.154 — passes but higher
-#
-# Gaussian performs better for browsers specifically but Tweedie
-# used throughout all functional group analyses for cross-group
-# comparability. ZI Tweedie not tested — failed to converge at
-# 11% zeros (ZI component unidentifiable at this zero proportion).
-#
-# Proceed with tweedie(link = "log") on mean_biomass.
-
-site_family <- tweedie(link = "log")
-
-# ── Candidate models ──────────────────────────────────────────
-# Primary pressure predictor: log_settlement_grav_sc
-# Sensitivity: log_settlement_pop_sc, log_market_gravity_sc
-
-m1_hab <- glmmTMB(mean_biomass ~ rugosity_sc,
-                  family = site_family, data = total_model_data)
-
-m2_hab_press <- glmmTMB(mean_biomass ~ rugosity_sc +
-                          log_settlement_grav_sc,
-                        family = site_family, data = total_model_data)
-
-m3_hab_press_mpa <- glmmTMB(mean_biomass ~ rugosity_sc +
-                              log_settlement_grav_sc +
-                              mpa_status,
-                            family = site_family, data = total_model_data)
-
-m4_conn <- glmmTMB(mean_biomass ~ rugosity_sc +
-                     log_settlement_grav_sc +
-                     mpa_status +
-                     connectivity_sc,
-                   family = site_family, data = total_model_data)
-
-m5_chla <- glmmTMB(mean_biomass ~ rugosity_sc +
-                     log_settlement_grav_sc +
-                     mpa_status +
-                     connectivity_sc +
-                     log_chla_sc,
-                   family = site_family, data = total_model_data)
-
-m6_dhw <- glmmTMB(mean_biomass ~ rugosity_sc +
-                    log_settlement_grav_sc +
-                    mpa_status +
-                    connectivity_sc +
-                    log_max_dhw_sc,
-                  family = site_family, data = total_model_data)
-
-m7_mpa_conn <- glmmTMB(mean_biomass ~ rugosity_sc +
-                         log_settlement_grav_sc +
-                         mpa_status * connectivity_sc,
-                       family = site_family, data = total_model_data)
-
-m8_mpa_press <- glmmTMB(mean_biomass ~ rugosity_sc +
-                          mpa_status * log_settlement_grav_sc +
-                          connectivity_sc,
-                        family = site_family, data = total_model_data)
-
-m9_conn_press <- glmmTMB(mean_biomass ~ rugosity_sc +
-                           mpa_status +
-                           connectivity_sc * log_settlement_grav_sc,
-                         family = site_family, data = total_model_data)
-
-sens_settpop <- glmmTMB(mean_biomass ~ rugosity_sc +
-                          log_settlement_pop_sc +
-                          mpa_status +
-                          connectivity_sc,
-                        family = site_family, data = total_model_data)
-
-sens_mktgrav <- glmmTMB(mean_biomass ~ rugosity_sc +
-                          log_market_gravity_sc +
-                          mpa_status +
-                          connectivity_sc,
-                        family = site_family, data = total_model_data)
-
-model_list_s1 <- list(
-  "Habitat" = m1_hab,
-  "Habitat + pressure" = m2_hab_press,
-  "Habitat + pressure + MPA" = m3_hab_press_mpa,
-  "Above + connectivity" = m4_conn,
-  "Above + chla" = m5_chla,
-  "Above + DHW" = m6_dhw,
-  "MPA x connectivity" = m7_mpa_conn,
-  "MPA x pressure" = m8_mpa_press,
-  "Connectivity x pressure" = m9_conn_press,
-  "Settlement pop. (sensitivity)" = sens_settpop,
-  "Market gravity (sensitivity)" = sens_mktgrav
-)
-
-cat("\n--- AICc: Site-level browser candidate models ---\n")
-print(make_aicc_df(model_list_s1))
-
-# ── Browser site-level results ────────────────────────────────
-# PRIMARY EVIDENCE THRESHOLD (delta < 2):
-#   MPA x pressure is the sole supported model (weight = 0.74).
-#   No other model within delta < 2.
-#
-# All other models delta > 5 — very strong support for MPA x
-# pressure as the dominant structuring process.
-#
-# NOTE ON SENSITIVITY MODELS:
-#   Settlement pop. (delta 5.53) and market gravity (delta 5.51)
-#   not supported — settlement gravity confirmed as the
-#   appropriate pressure metric for browser biomass.
-#
-# NOTE ON HABITAT:
-#   Habitat alone (delta 10.52) and habitat + pressure (delta 12.75)
-#   strongly unsupported — browser biomass is not structured by
-#   habitat complexity independently of protection and pressure.
-#   Direct contrast with total biomass where habitat + pressure
-#   was the best model.
-
-summary(m8_mpa_press)
-
-# ── Coefficients — MPA x pressure (site-level browsers) ──────
-#
-# Rugosity:           β = 0.57, p < 0.001
-#   Strong positive — browsers more abundant on complex reefs.
-#   Larger effect than total biomass (β = 0.25), suggesting
-#   browsers are more habitat-dependent than the total community.
-#   Effect only emerges within the MPA x pressure context —
-#   habitat alone not supported (delta 10.52).
-#
-# MPA medium:         β = 1.70, p < 0.001
-#   Highly significant — medium-protection sites have
-#   substantially higher browser biomass than unprotected
-#   sites at mean pressure. Much stronger than total biomass
-#   where MPA main effect was non-significant.
-#
-# MPA low:            β = -0.58, p = 0.38 — not significant
-#
-# Settlement gravity: β = -0.21, p = 0.32 — not significant
-#   No detectable pressure effect at unprotected sites —
-#   browsers likely already depleted across full pressure
-#   gradient, leaving no residual signal.
-#
-# Connectivity:       β = 0.16, p = 0.37 — not significant
-#
-# MPA x pressure interactions:
-#   low × pressure:    β = +1.06, p = 0.116 — not significant
-#   medium × pressure: β = +1.83, p = 0.001 — strongly significant
-#
-# Implied pressure slopes by protection level:
-#   none:   -0.21 (n.s.) — no detectable effect
-#   low:    -0.21 + 1.06 = +0.85 (n.s.) — underpowered (n = 13)
-#   medium: -0.21 + 1.83 = +1.61 (p = 0.001) — strongly positive
-#
-# Key interpretation:
-#   At unprotected sites pressure has no detectable effect —
-#   browsers are depleted across the full gradient. At medium-
-#   protection sites browser biomass increases strongly with
-#   pressure — MPAs are most effective precisely where fishing
-#   pressure is greatest. The contrast between protected and
-#   unprotected sites is largest at high-pressure sites.
-#
-# Low protection:
-#   Large positive interaction (β = +1.06) but non-significant
-#   (p = 0.116, n = 13) — underpowered. Direction consistent
-#   with medium protection result.
-
-# ── Marginal effect plots ─────────────────────────────────────
-press_range <- seq(min(total_model_data$log_settlement_grav_sc, na.rm = TRUE),
-                   max(total_model_data$log_settlement_grav_sc, na.rm = TRUE),
-                   length.out = 100)
-
-mpa_press_grid <- expand.grid(
-  log_settlement_grav_sc = press_range,
-  mpa_status = factor(c("none", "low", "medium"),
-                      levels = c("none", "low", "medium"))
-) %>%
-  mutate(rugosity_sc = 0,
-         connectivity_sc = 0)
-
-mpa_press_pred <- predict(m8_mpa_press,
-                          newdata = mpa_press_grid,
-                          se.fit = TRUE,
-                          type = "response",
-                          re.form = NA)
-
-mpa_press_grid$fit <- mpa_press_pred$fit
-mpa_press_grid$lwr <- mpa_press_pred$fit - 1.96 * mpa_press_pred$se.fit
-mpa_press_grid$upr <- mpa_press_pred$fit + 1.96 * mpa_press_pred$se.fit
-
-(p_browser_mpa_press <- ggplot(mpa_press_grid,
-                               aes(x = log_settlement_grav_sc,
-                                   y = fit,
-                                   colour = mpa_status,
-                                   fill = mpa_status)) +
-    geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.15, colour = NA) +
-    geom_line(linewidth = 1.1) +
-    scale_colour_manual(values = c("none" = "#d7191c",
-                                   "low" = "#fdae61",
-                                   "medium" = "#2c7bb6"),
-                        name = "MPA status") +
-    scale_fill_manual(values = c("none" = "#d7191c",
-                                 "low" = "#fdae61",
-                                 "medium" = "#2c7bb6"),
-                      name = "MPA status") +
-    labs(x = "Settlement gravity (scaled)",
-         y = "Browser biomass (g)",
-         title = "MPA x pressure — browsers") +
-    theme_bw(base_size = 13) +
-    theme(axis.title = element_text(face = "bold")))
-
-jpeg("site_browser_mpa_press_interaction.jpg", width = 22, height = 11, units = "cm", res = 300)
-print(p_browser_mpa_press)
-dev.off()
-
-#note should i jsut test mpa or just connectvity etc..
 
 # ============================================================
-#  PART 2 — TRANSECT-LEVEL BIOMASS (SENSITIVITY CHECK)
+#  PRE-ANALYSIS: HUMAN PRESSURE METRIC SELECTION
+#  Mirrors total biomass procedure.
+#  Tests both Gaussian log and Tweedie to match family
+#  selection — use Gaussian log here for comparability with
+#  total biomass univariate selection.
 # ============================================================
 
-summary(browser_transects$transect_browser_biomass)
+browser_press_settgrav <- lm(log_mean_biomass ~ log_settlement_grav_sc,
+                             data = browser_model_data)
+browser_press_settpop  <- lm(log_mean_biomass ~ log_settlement_pop_sc,
+                             data = browser_model_data)
+browser_press_mktgrav  <- lm(log_mean_biomass ~ log_market_gravity_sc,
+                             data = browser_model_data)
 
-zeros <- mean(browser_transects$transect_browser_biomass == 0, na.rm = TRUE)
-cat("Proportion of zeros:", round(zeros, 3), "\n")
-
-(browser_raw <- ggplot(browser_transects, aes(x = transect_browser_biomass)) +
-    geom_histogram(bins = 50, fill = "#2c7bb6", colour = "white") +
-    labs(x = "Browser biomass per transect (g)", y = "Frequency",
-         title = "Raw") + theme_bw())
-
-(browser_log <- ggplot(transect_model_data, aes(x = log_browser_biomass)) +
-    geom_histogram(bins = 30, fill = "#1a9641", colour = "white") +
-    labs(x = "log(biomass + 0.01)", y = "Frequency",
-         title = "Log-transformed") + theme_bw())
-
-jpeg("browser_biomass_distributions.jpg", width = 22, height = 11, units = "cm", res = 300)
-gridExtra::grid.arrange(browser_raw, browser_log, ncol = 2)
-dev.off()
-
-browser_nonzero <- browser_transects %>% filter(transect_browser_biomass > 0)
-
-MASS::boxcox(
-  lm(transect_browser_biomass ~ 1, data = browser_nonzero),
-  lambda = seq(-2, 2, 0.1)
-)
-
-ggplot(transect_model_data,
-       aes(x = reorder(site, transect_browser_biomass, median),
-           y = transect_browser_biomass)) +
-  geom_boxplot(fill = "#2c7bb6", alpha = 0.6,
-               outlier.colour = "black", outlier.size = 1) +
-  coord_flip() +
-  labs(x = NULL, y = "Browser biomass (g)",
-       title = "Browser biomass by site") +
-  theme_bw(base_size = 9)
-
-transect_model_data %>%
-  group_by(site) %>%
-  summarise(
-    n_transects = n(),
-    prop_zeros = mean(transect_browser_biomass == 0),
-    mean_biomass = mean(transect_browser_biomass),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(prop_zeros)) %>%
-  print(n = Inf)
-
-# ── Family selection ──────────────────────────────────────────
-# 43% zeros — Tweedie required. Gaussian not tested.
-# ZI Tweedie adopted only if: (1) ZI test significant AND
-# (2) AICc improves by > 2.
-
-transect_m_tweedie <- glmmTMB(
-  transect_browser_biomass ~ rugosity_sc +
-    log_settlement_grav_sc +
-    log_chla_sc +
-    log_max_dhw_sc +
-    (1 | site),
-  family = tweedie(link = "log"),
-  data = transect_model_data
-)
-
-transect_m_tweedie_zi <- glmmTMB(
-  transect_browser_biomass ~ rugosity_sc +
-    log_settlement_grav_sc +
-    log_chla_sc +
-    log_max_dhw_sc +
-    (1 | site),
-  family = tweedie(link = "log"),
-  ziformula = ~1,
-  data = transect_model_data
-)
-
-transect_res_tweedie <- simulateResiduals(transect_m_tweedie, n = 1000)
-transect_res_tweedie_zi <- simulateResiduals(transect_m_tweedie_zi, n = 1000)
-
-jpeg("dharma_browser_transect_tweedie.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(transect_res_tweedie, main = "DHARMa — Tweedie"); dev.off()
-
-jpeg("dharma_browser_transect_tweedie_zi.jpg", width = 25, height = 15, units = "cm", res = 300)
-plot(transect_res_tweedie_zi, main = "DHARMa — ZI Tweedie"); dev.off()
-
-plot(transect_res_tweedie)
-testZeroInflation(transect_res_tweedie)
-testDispersion(transect_res_tweedie)
-
-plot(transect_res_tweedie_zi)
-testZeroInflation(transect_res_tweedie_zi)
-testDispersion(transect_res_tweedie_zi)
-
-cat("\n--- Family selection: transect-level browser biomass ---\n")
+cat("\n--- Pre-analysis: browser pressure metric selection ---\n")
 print(make_aicc_df(list(
-  "Tweedie" = transect_m_tweedie,
-  "ZI Tweedie" = transect_m_tweedie_zi
+  "Settlement gravity" = browser_press_settgrav,
+  "Settlement pop."    = browser_press_settpop,
+  "Market gravity"     = browser_press_mktgrav
 )))
 
-# Tweedie model chosen for consistency
+
+# ── Browser pressure metric decision ──────────────────────────
+# Univariate AICc comparison of three candidate metrics.
+# Identical procedure to total biomass pre-analysis selection.
+#
+# Results:
+#   Market gravity:     AICc = 297.48, weight = 0.552 — best
+#   Settlement gravity: ΔAICc = 1.47,  weight = 0.266
+#   Settlement pop.:    ΔAICc = 2.22,  weight = 0.182
+#
+# Gravity metrics are clearly preferred — both within
+# ΔAICc < 2, indicating genuine uncertainty in which
+# pressure proxy best captures fishing impacts on browsers.
+# Market gravity selected as primary metric: it has the
+# lowest AICc and greatest weight (more than twice that of the other two).
+
+# This differs from total biomass where settlement gravity was clearly preferred
+# (weight = 0.672, ΔAICc > 2 for alternatives) — the
+# weaker metric discrimination for browsers likely reflects
+# the more complex, management-mediated relationships
+# governing this heavily targeted functional group.
+#
+# All three metrics retained for sensitivity analysis (Stage 4a).
+
+# ============================================================
+#  MODEL FAMILY SELECTION
+#
+#  Browser biomass differs from total biomass:
+#    Site-level zeros: ~11% — log(x + 0.01) offsets these
+#    Tweedie handles zeros natively without offset
+#
+#  Three families tested on global model structure:
+#    Gaussian log:  lm() on log(mean_biomass + 0.01)
+#    Tweedie:       glmmTMB() on mean_biomass, log link
+#
+#  DHARMa residual simulation used for Tweedie diagnostics.
+#  Standard plot() used for Gaussian log diagnostics.
+#
+#  Decision rule:
+#    If Gaussian log diagnostics adequate → use lm() as per
+#    total biomass for consistency and varpart compatibility.
+#    If Gaussian log fails → use Tweedie; note that varpart
+#    is not directly available and Stage 1 will use an
+#    approximation (see below).
+# ============================================================
+
+# ── Gaussian log (global model) ───────────────────────────────
+browser_lm_global <- lm(log_mean_biomass ~ rugosity_sc +
+                          log_market_gravity_sc +
+                          connectivity_sc +
+                          mpa_status +
+                          log_chla_sc +
+                          log_max_dhw_sc,
+                        data = browser_model_data)
+
+par(mfrow = c(2, 2)); plot(browser_lm_global); par(mfrow = c(1, 1))
+
+# ── Tweedie (global model) ────────────────────────────────────
+browser_tw_global <- glmmTMB(mean_biomass ~ rugosity_sc +
+                               log_market_gravity_sc +
+                               connectivity_sc +
+                               mpa_status +
+                               log_chla_sc +
+                               log_max_dhw_sc,
+                             family = tweedie(link = "log"),
+                             data   = browser_model_data)
+
+browser_tw_res <- simulateResiduals(browser_tw_global, n = 1000)
+plot(browser_tw_res)
+testZeroInflation(browser_tw_res)
+testDispersion(browser_tw_res)
+
+# ============================================================
+#  MODEL FAMILY SELECTION
+#
+#  Browser biomass has 6 zero sites (11%) at the site level.
+#  Log-transformed distribution is bimodal — zero sites form
+#  an isolated cluster at log(0.01) = -4.6, separated from
+#  the main distribution by ~10 log units. No offset constant
+#  resolves this as the gap reflects genuine biological
+#  absence, not low biomass.
+#
+#  Two families tested on the global model structure:
+#
+#  Gaussian log: REJECTED
+#    Residuals vs Fitted: strong downward curve driven by
+#      zero sites — clear non-linearity.
+#    Q-Q: severe lower tail deviation — zero sites fall
+#      off the theoretical line entirely.
+#    Scale-Location: strong downward trend —
+#      heteroscedasticity throughout.
+#    Residuals vs Leverage: sites 5, 42, 32 outside Cook's
+#      distance — zero sites unduly influential.
+#
+#  Tweedie (log link): SELECTED
+#    Handles zeros natively without offset.
+#    DHARMa diagnostics (n = 1000 simulations):
+#      KS test:         p = 0.785 — good fit
+#      Dispersion:      p = 0.218, ratio = 1.605 — acceptable
+#      Zero inflation:  p = 0.984 — ZI component not needed
+#      Outlier test:    p = 1.000 — no outliers
+#      Residuals vs predicted: no systematic pattern
+#
+#  Proceed: glmmTMB(family = tweedie(link = "log")) on
+#  raw mean_biomass throughout browser site-level analyses.
+#
+#  Implication for Stage 1:
+#  vegan::varpart() requires lm-compatible models and cannot
+#  be used with glmmTMB Tweedie. Stage 1 uses a sequential
+#  pseudo-R² approximation instead (see below).
+# ============================================================
+
+# ============================================================
+#  RANDOM EFFECT STRUCTURE ---- make sure to update this or decide on this...
+#  Country RE tested as per total biomass procedure.
+#  Uses Tweedie on raw mean_biomass — consistent with
+#  family selection decision above.
+# ============================================================
+
+browser_re_null <- glmmTMB(mean_biomass ~ rugosity_sc +
+                             log_market_gravity_sc +
+                             log_chla_sc +
+                             log_max_dhw_sc,
+                           family = tweedie(link = "log"),
+                           data   = browser_model_data)
+
+browser_re_country <- glmmTMB(mean_biomass ~ rugosity_sc +
+                                log_market_gravity_sc +
+                                log_chla_sc +
+                                log_max_dhw_sc +
+                                (1 | country),
+                              family = tweedie(link = "log"),
+                              data   = browser_model_data)
+
+cat("\n--- Browser RE structure comparison ---\n")
+print(make_aicc_df(list(
+  "No RE"         = browser_re_null,
+  "(1 | country)" = browser_re_country
+)))
 
 # ── Random effect structure ───────────────────────────────────
+# Country RE tested as per total biomass procedure.
+#
+# Results:
+#   (1 | country): AICc = 838.77, weight = 0.510
+#   No RE:         ΔAICc = 0.08,  weight = 0.490
+#
+# Weights are split almost exactly 50/50 — the two models
+# are statistically indistinguishable. Country RE adds no
+# meaningful explanatory value, consistent with the total
+# biomass result. Proceed without country RE throughout
+# all browser site-level analyses.
 
-transect_re_null <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                              log_settlement_grav_sc +
-                              log_chla_sc +
-                              log_max_dhw_sc,
-                            family = tweedie(link = "log"),
-                            data = transect_model_data)
 
-transect_re_site <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                              log_settlement_grav_sc +
-                              log_chla_sc +
-                              log_max_dhw_sc +
-                              (1 | site),
-                            family = tweedie(link = "log"),
-                            data = transect_model_data)
+# ============================================================
+#  STAGE 1 — VARIANCE PARTITIONING
+#
+#  Tweedie selected for browser biomass — vegan::varpart()
+#  not available as it requires lm-compatible models.
+#
+#  Sequential pseudo-R² decomposition used instead:
+#  Fit models adding each process group in turn, compute
+#  Nagelkerke R² at each step using the performance package.
+#  Unique fractions approximated as the increment in R²
+#  when each group is added while conditioning on others.
+#
+#  This is not equivalent to formal variance partitioning —
+#  shared fractions cannot be cleanly decomposed and negative
+#  unique fractions are not estimable. Results are reported
+#  as approximate contributions and interpreted alongside
+#  Stage 2 hierarchical model comparison rather than as
+#  standalone variance decomposition.
+#
+#  MPA excluded — governance variable, tested in Stage 2.
+#  Three process groups as per total biomass:
+#    Local:       rugosity + settlement gravity
+#    Spatial:     connectivity
+#    Environmental: chla + DHW
+# ============================================================
 
-cat("\n--- RE structure comparison (transect-level browser) ---\n")
-print(make_aicc_df(list(
-  "No RE" = transect_re_null,
-  "(1 | site)" = transect_re_site
-)))
+# ── Null model ────────────────────────────────────────────────
+vp_b_null <- glmmTMB(mean_biomass ~ 1,
+                     family = tweedie(link = "log"),
+                     data   = browser_model_data)
 
-# (1|site) significantly wins over no RE (delta AICc: 46.04 in favour of (1|site))
+# ── Local only ────────────────────────────────────────────────
+vp_b_local <- glmmTMB(mean_biomass ~ rugosity_sc +
+                        log_market_gravity_sc,
+                      family = tweedie(link = "log"),
+                      data   = browser_model_data)
 
-# ── Candidate models ──────────────────────────────────────────
+# ── Spatial only ──────────────────────────────────────────────
+vp_b_spatial <- glmmTMB(mean_biomass ~ connectivity_sc,
+                        family = tweedie(link = "log"),
+                        data   = browser_model_data)
 
-browser_family <- tweedie(link = "log")
+# ── Environmental only ────────────────────────────────────────
+vp_b_environ <- glmmTMB(mean_biomass ~ log_chla_sc +
+                          log_max_dhw_sc,
+                        family = tweedie(link = "log"),
+                        data   = browser_model_data)
 
-transect_m1_hab <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                             (1 | site),
-                           family = browser_family, data = transect_model_data)
+# ── All groups combined (no MPA) ──────────────────────────────
+vp_b_all <- glmmTMB(mean_biomass ~ rugosity_sc +
+                      log_market_gravity_sc +
+                      connectivity_sc +
+                      log_chla_sc +
+                      log_max_dhw_sc,
+                    family = tweedie(link = "log"),
+                    data   = browser_model_data)
 
-transect_m2_hab_press <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                   log_settlement_grav_sc +
-                                   (1 | site),
-                                 family = browser_family, data = transect_model_data)
+# ── Unique fractions: condition each group on the others ──────
+# Local | spatial + environmental
+vp_b_local_unique <- glmmTMB(mean_biomass ~ rugosity_sc +
+                               log_market_gravity_sc +
+                               connectivity_sc +
+                               log_chla_sc +
+                               log_max_dhw_sc,
+                             family = tweedie(link = "log"),
+                             data   = browser_model_data)
 
-transect_m3_hab_press_mpa <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                       log_settlement_grav_sc +
-                                       mpa_status +
-                                       (1 | site),
-                                     family = browser_family, data = transect_model_data)
+vp_b_no_local <- glmmTMB(mean_biomass ~ connectivity_sc +
+                           log_chla_sc +
+                           log_max_dhw_sc,
+                         family = tweedie(link = "log"),
+                         data   = browser_model_data)
 
-transect_m4_conn <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                              log_settlement_grav_sc +
-                              mpa_status +
-                              connectivity_sc +
-                              (1 | site),
-                            family = browser_family, data = transect_model_data)
+vp_b_no_spatial <- glmmTMB(mean_biomass ~ rugosity_sc +
+                             log_market_gravity_sc +
+                             log_chla_sc +
+                             log_max_dhw_sc,
+                           family = tweedie(link = "log"),
+                           data   = browser_model_data)
 
-transect_m5_chla <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                              log_settlement_grav_sc +
-                              mpa_status +
-                              connectivity_sc +
-                              log_chla_sc +
-                              (1 | site),
-                            family = browser_family, data = transect_model_data)
+vp_b_no_environ <- glmmTMB(mean_biomass ~ rugosity_sc +
+                             log_market_gravity_sc +
+                             connectivity_sc,
+                           family = tweedie(link = "log"),
+                           data   = browser_model_data)
 
-transect_m6_dhw <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                             log_settlement_grav_sc +
-                             mpa_status +
-                             connectivity_sc +
-                             log_max_dhw_sc +
-                             (1 | site),
-                           family = browser_family, data = transect_model_data)
+# ── Extract McFadden pseudo-R² ────────────────────────────────
+# McFadden R² = 1 - (logLik(model) / logLik(null))
+# Comparable across Tweedie models with same response and data.
 
-transect_m7_mpa_conn <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                  log_settlement_grav_sc +
-                                  mpa_status * connectivity_sc +
-                                  (1 | site),
-                                family = browser_family, data = transect_model_data)
+get_mcfadden <- function(model, null_model) {
+  round(1 - (as.numeric(logLik(model)) / 
+               as.numeric(logLik(null_model))), 3)
+}
 
-transect_m8_mpa_press <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                   mpa_status * log_settlement_grav_sc +
-                                   connectivity_sc +
-                                   (1 | site),
-                                 family = browser_family, data = transect_model_data)
+r2_all     <- get_mcfadden(vp_b_all,        vp_b_null)
+r2_noloc   <- get_mcfadden(vp_b_no_local,   vp_b_null)
+r2_nospat  <- get_mcfadden(vp_b_no_spatial, vp_b_null)
+r2_noenv   <- get_mcfadden(vp_b_no_environ, vp_b_null)
 
-transect_m9_conn_press <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                    mpa_status +
-                                    connectivity_sc * log_settlement_grav_sc +
-                                    (1 | site),
-                                  family = browser_family, data = transect_model_data)
+# Unique fractions = R²(all) - R²(all without that group)
+unique_local   <- round(r2_all - r2_noloc,  3)
+unique_spatial <- round(r2_all - r2_nospat, 3)
+unique_environ <- round(r2_all - r2_noenv,  3)
 
-transect_sens_settpop <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                   log_settlement_pop_sc +
-                                   mpa_status +
-                                   connectivity_sc +
-                                   (1 | site),
-                                 family = browser_family, data = transect_model_data)
+cat("\n--- Stage 1: Browser pseudo-R² variance decomposition ---\n")
+cat("Total McFadden R² (all groups):", r2_all,        "\n")
+cat("Unique local:                  ", unique_local,   "\n")
+cat("Unique spatial:                ", unique_spatial, "\n")
+cat("Unique environmental:          ", unique_environ, "\n")
+cat("\nNOTE: McFadden R² used in place of adjusted R² —",
+    "\nTweedie family precludes vegan::varpart().",
+    "\nUnique fractions approximate only — shared variance",
+    "\nnot decomposable with this method.\n")
 
-transect_sens_mktgrav <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
-                                   log_market_gravity_sc +
-                                   mpa_status +
-                                   connectivity_sc +
-                                   (1 | site),
-                                 family = browser_family, data = transect_model_data)
+cat("\nLRT — local unique fraction:\n")
+print(anova(vp_b_no_local, vp_b_all))
 
-model_list_transect <- list(
-  "Habitat" = transect_m1_hab,
-  "Habitat + pressure" = transect_m2_hab_press,
-  "Habitat + pressure + MPA" = transect_m3_hab_press_mpa,
-  "Above + connectivity" = transect_m4_conn,
-  "Above + chla" = transect_m5_chla,
-  "Above + DHW" = transect_m6_dhw,
-  "MPA x connectivity" = transect_m7_mpa_conn,
-  "MPA x pressure" = transect_m8_mpa_press,
-  "Connectivity x pressure" = transect_m9_conn_press,
-  "Settlement pop. (sensitivity)" = transect_sens_settpop,
-  "Market gravity (sensitivity)" = transect_sens_mktgrav
+cat("\nLRT — spatial unique fraction:\n")
+print(anova(vp_b_no_spatial, vp_b_all))
+
+cat("\nLRT — environmental unique fraction:\n")
+print(anova(vp_b_no_environ, vp_b_all))
+
+# ── Stage 1 results ───────────────────────────────────────────
+# McFadden R² fractions (approximate — but not comparable to
+# adjusted R² from total biomass varpart):
+#   Total R²:             0.018
+#   Unique local:         0.010
+#   Unique spatial:       0.006
+#   Unique environmental: 0.002
+#
+# LRT significance of unique fractions:
+#   Local:         χ²(2) = 7.55, p = 0.023 * — significant
+#   Spatial:       χ²(1) = 4.93, p = 0.026 * — significant
+#   Environmental: χ²(2) = 0.91, p = 0.635   — not significant
+#
+# KEY CONTRAST WITH TOTAL BIOMASS:
+#   Total biomass: local significant, spatial p = 0.904
+#   Browser biomass: BOTH local and spatial significant
+#
+# Connectivity explains a significant unique fraction of
+# browser biomass independently of local and environmental
+# processes. This suggests browsers as a functional group
+# are more sensitive to larval network position than the
+# total fish community — consistent with browsers being
+# heavily targeted by fishing and dependent on external
+# recruitment to maintain populations at exploited sites.
+#
+# Environmental context not significant for browsers —
+# consistent with total biomass result (p = 0.077 there,
+# p = 0.635 here).
+#
+# NOTE: McFadden R² magnitudes are not directly comparable
+# to adjusted R² from total biomass OLS varpart. LRT
+# significance tests are the primary inferential tool here.
+# Magnitude comparisons between functional groups should
+# be made cautiously and only qualitatively.
+
+# ============================================================
+#  STAGE 2 — HIERARCHICAL MODEL COMPARISON
+#
+#  Identical nested sequence to total biomass.
+#  All models fitted using glmmTMB(tweedie) on raw
+#  mean_biomass — consistent with family selection.
+#
+#  AICc comparison uses make_aicc_df() as per total biomass.
+#  R² increments use McFadden pseudo-R² over null model
+#  (not adjusted R² — Tweedie precludes this).
+#  Delta_R2 computed relative to Local baseline as per
+#  total biomass procedure.
+# ============================================================
+
+# ── Null model ────────────────────────────────────────────────
+b_null <- glmmTMB(mean_biomass ~ 1,
+                  family = tweedie(link = "log"),
+                  data   = browser_model_data)
+
+# ── Local ecological baseline ─────────────────────────────────
+b_local <- glmmTMB(mean_biomass ~ rugosity_sc +
+                     log_market_gravity_sc,
+                   family = tweedie(link = "log"),
+                   data   = browser_model_data)
+
+# ── Local + chla ──────────────────────────────────────────────
+b_local_chla <- glmmTMB(mean_biomass ~ rugosity_sc +
+                          log_market_gravity_sc +
+                          log_chla_sc,
+                        family = tweedie(link = "log"),
+                        data   = browser_model_data)
+
+# ── Local + DHW ───────────────────────────────────────────────
+b_local_dhw <- glmmTMB(mean_biomass ~ rugosity_sc +
+                         log_market_gravity_sc +
+                         log_max_dhw_sc,
+                       family = tweedie(link = "log"),
+                       data   = browser_model_data)
+
+# ── Local + environmental context ────────────────────────────
+b_local_env <- glmmTMB(mean_biomass ~ rugosity_sc +
+                         log_market_gravity_sc +
+                         log_chla_sc +
+                         log_max_dhw_sc,
+                       family = tweedie(link = "log"),
+                       data   = browser_model_data)
+
+# ── Local + spatial ───────────────────────────────────────────
+b_local_spatial <- glmmTMB(mean_biomass ~ rugosity_sc +
+                             log_market_gravity_sc +
+                             connectivity_sc,
+                           family = tweedie(link = "log"),
+                           data   = browser_model_data)
+
+# ── Local + MPA (governance test) ────────────────────────────
+b_local_mpa <- glmmTMB(mean_biomass ~ rugosity_sc +
+                         log_market_gravity_sc +
+                         mpa_status,
+                       family = tweedie(link = "log"),
+                       data   = browser_model_data)
+
+# ── Global model ──────────────────────────────────────────────
+b_global <- glmmTMB(mean_biomass ~ rugosity_sc +
+                      log_market_gravity_sc +
+                      connectivity_sc +
+                      mpa_status +
+                      log_chla_sc +
+                      log_max_dhw_sc,
+                    family = tweedie(link = "log"),
+                    data   = browser_model_data)
+
+# ── Model list ────────────────────────────────────────────────
+browser_model_list <- list(
+  "Null"            = b_null,
+  "Local"           = b_local,
+  "Local + chla"    = b_local_chla,
+  "Local + DHW"     = b_local_dhw,
+  "Local + env"     = b_local_env,
+  "Local + MPA"     = b_local_mpa,
+  "Local + spatial" = b_local_spatial,
+  "Global"          = b_global
 )
 
-cat("\n--- AICc: Transect-level browser biomass ---\n")
-print(make_aicc_df(model_list_transect))
+# ── AICc ranked table ─────────────────────────────────────────
+cat("\n--- Stage 2: Browser model comparison (AICc ranked) ---\n")
+print(make_aicc_df(browser_model_list))
 
-# ── Transect-level browser biomass results ────────────────────
-#
-#                          Model    AICc Delta Weight
-#                 MPA x pressure 2652.38  0.00  0.58 — DOMINANT
-#                        Habitat 2656.28  3.90  0.08
-#       Habitat + pressure + MPA 2656.82  4.44  0.06
-#   Market gravity (sensitivity) 2657.02  4.64  0.06
-#                   Above + chla 2657.11  4.74  0.05
-#           Above + connectivity 2657.73  5.36  0.04
-#  Settlement pop. (sensitivity) 2658.28  5.91  0.03
-#             Habitat + pressure 2658.32  5.95  0.03
-#                    Above + DHW 2658.43  6.05  0.03
-#             MPA x connectivity 2658.82  6.44  0.02
-#        Connectivity x pressure 2659.90  7.53  0.01
-#
-# PRIMARY EVIDENCE THRESHOLD (delta < 2):
-#   MPA x pressure is the sole supported model (weight = 0.58).
-#   No other model within delta < 2.
-#
-# CONVERGENCE WITH SITE-LEVEL:
-#   ✓ MPA x pressure dominant at both levels
-#     Site:      weight = 0.74, sole model within delta < 2
-#     Transect:  weight = 0.58, sole model within delta < 2
-#   ✓ All other models delta > 3 at both levels
-#   ✓ Habitat alone appears at transect level (delta 3.90)
-#     but not site level (delta 10.52) — within-site rugosity
-#     variation explains some transect biomass independently
-#     of the MPA x pressure signal, but is not the primary driver
-#   ✓ Sensitivity metrics not supported (delta > 4) — settlement
-#     gravity confirmed as appropriate pressure metric
-#
-# Key conclusion:
-#   MPA x pressure dominance is robust to analytical scale.
-#   Retaining within-site variation at transect level does not
-#   change the primary finding. 
+# ── McFadden R² increments over local baseline ────────────────
+cat("\n--- Stage 2: Browser variance explained ---\n")
 
-summary(transect_m8_mpa_press)
+local_loglik_b <- as.numeric(logLik(b_local))
+null_loglik_b  <- as.numeric(logLik(b_null))
 
-# ── Coefficients — MPA x pressure (browser counts) ───────────
+browser_model_list %>%
+  imap_dfr(~ tibble(
+    Model      = .y,
+    McF_R2     = round(1 - (as.numeric(logLik(.x)) /
+                              null_loglik_b), 3)
+  )) %>%
+  mutate(
+    Delta_R2 = round(McF_R2 - (1 - (local_loglik_b /
+                                      null_loglik_b)), 3),
+    Delta_R2 = ifelse(Model %in% c("Null", "Local"), NA, Delta_R2)
+  ) %>%
+  arrange(Model == "Null",
+          desc(Model == "Local"),
+          desc(McF_R2)) %>%
+  print()
+
+# ── Stage 2 results ───────────────────────────────────────────
+# Browser biomass shows a fundamentally different structuring
+# pattern from total biomass.
 #
-# Top model (c_m8_mpa_press) vs second model (c_m4_conn):
-#   ✓ Settlement gravity: +0.29** and +0.38*** — consistently
-#     positive across both models (contrast with biomass where
-#     baseline pressure slope is negative and non-significant)
-#   ✓ Connectivity: +0.26* and +0.23* — significant in both
-#     models (absent from all biomass models)
-#   ✓ Rugosity: 0.10-0.11 n.s. in both — not significant
-#     (contrast with biomass where β = 0.57-0.62***)
-#   ✓ MPA status: not significant at either level in either model
+# AICc ranking:
+#   Local + MPA:     AICc = 828.87, weight = 0.693 — best
+#   Local + spatial: ΔAICc = 3.32,  weight = 0.132 — moderate support
+#   Global:          ΔAICc = 3.46,  weight = 0.123 — moderate support
+#   Local:           ΔAICc = 6.84,  weight = 0.023 — not supported
+#   Local + DHW:     ΔAICc = 8.50,  weight = 0.010 — not supported
+#   Local + chla:    ΔAICc = 8.68,  weight = 0.009 — not supported
+#   Null:            ΔAICc = 9.71,  weight = 0.005 — worst
+#   Local + env:     ΔAICc = 9.99,  weight = 0.005 — worst
 #
-# MPA x pressure interactions (c_m8_mpa_press):
-#   low × pressure:    β = +0.63, p = 0.017 — significant
-#   medium × pressure: β = +0.39, p = 0.196 — not significant
+# McFadden R² increments over Local baseline:
+#   MPA:         +0.015 — largest single contribution
+#   Spatial:     +0.007 — second largest
+#   Environment: +0.003 — negligible
+#   Global:      +0.021 — driven by MPA and spatial
 #
-# Implied pressure slopes by protection level:
-#   none:   +0.29 (p = 0.002) — positive, more browsers at
-#           higher pressure (reversal from biomass)
-#   low:    +0.29 + 0.63 = +0.92 — stronger positive
-#   medium: +0.29 + 0.39 = +0.68 — positive but uncertain
+# KEY CONTRASTS WITH TOTAL BIOMASS:
 #
-# Site RE variance ≈ 0 in c_m8_mpa_press — interaction absorbs
-# all site-level variation. Connectivity inference from
-# c_m4_conn (RE variance = 0.011) more reliable.
+# 1. MPA status is the strongest predictor for browsers
+#    (best model weight = 0.693) — not supported for total
+#    biomass (ΔAICc = 3.52).
 #
-# Key conclusion:
-#   Counts and biomass are structured by fundamentally different
-#   processes. Pressure positive for counts but negative for
-#   biomass at unprotected sites — fishing reduces body size
-#   not numbers. Low MPAs recover numbers; medium MPAs recover
-#   body size. Connectivity supports abundance but not biomass.
+# 2. Connectivity adds moderate support for browsers
+#    (ΔAICc = 3.32) — made models worse for total biomass
+#    (ΔR² = -0.011). Consistent with Stage 1 LRT
+#    (spatial p = 0.026).
+#
+# 3. Local baseline barely improves on null for browsers
+#    (ΔAICc = 0.87 vs null) — for total biomass Local was
+#    strongly supported (ΔAICc = 8.49 vs null).
+#
+# 4. Environmental context adds nothing for browsers
+#    (ΔR² = +0.003) — consistent with Stage 1 (p = 0.635).
+#
+# Interpretation: browser biomass is structured primarily by
+# governance and spatial processes rather than local ecological
+# conditions. Protection status is the dominant driver —
+# consistent with browsers being a heavily targeted, mobile
+# functional group whose local abundance depends on management
+# regime and regional replenishment rather than habitat
+# carrying capacity alone.
+
+summary(b_local_mpa)
+
+# ── Coefficients: best supported model (Local + MPA) ─────────
+#
+# Rugosity:          β = +0.513, p = 0.003 **
+#   Positive and significant — structurally complex reefs
+#   support higher browser biomass. Effect larger than total
+#   biomass (β = +0.209), suggesting browsers are more
+#   habitat-dependent than the total community.
+#
+# Market gravity:    β = +0.178, p = 0.322 — not significant
+#   No detectable independent pressure effect once MPA
+#   status is included. Browsers may be depleted across
+#   the full pressure gradient at unprotected sites,
+#   leaving no residual pressure signal.
+#
+# MPA low:           β = +0.136, p = 0.793 — not significant
+#   Low protection indistinguishable from none — likely
+#   reflects insufficient enforcement and small sample
+#   (n = 7 low-protection sites).
+#
+# MPA medium:        β = +1.176, p < 0.001 ***
+#   Highly significant. Medium-protection sites have
+#   approximately 3.2x higher browser biomass than
+#   unprotected sites (e^1.176 = 3.24) at mean rugosity
+#   and pressure. The none→medium contrast is the dominant
+#   signal in the browser analysis.
+#
+# Key interpretation:
+#   Browser biomass is primarily structured by protection
+#   regime and habitat complexity. The significant medium
+#   MPA effect — absent for total biomass — indicates that
+#   browsers are particularly sensitive to management
+#   intervention, consistent with their status as a heavily
+#   targeted functional group. The non-significant pressure
+#   main effect suggests MPAs mediate the fishing pressure
+#   signal rather than pressure operating independently.
+
+# ============================================================
+#  STAGE 3 — INTERACTION TESTING
+#
+#  Reference model: Local + MPA (best supported in Stage 2,
+#  weight = 0.601). Interactions tested against this baseline.
+#
+#  Gate check: Global outperforms Local by ΔAICc = 7.70 —
+#  well above the ΔAICc > 2 threshold. Spatial and governance
+#  terms are clearly supported in additive models, making
+#  interaction testing both warranted and meaningful.
+#
+#  This contrasts with total biomass where the gate check
+#  failed (Global worse than Local) — for browsers, Stage 3
+#  is genuinely interpretable.
+# ============================================================
+
+# ── Gate check ────────────────────────────────────────────────
+delta_b_global_vs_local <- AICc(b_local) - AICc(b_global)
+cat("\nΔAICc (Local vs Global — browsers):",
+    round(delta_b_global_vs_local, 2), "\n")
+
+# ── Gate check result ─────────────────────────────────────────
+# ΔAICc (Local vs Global) = 6.84
+# Global outperforms Local by 6.84 AICc units — well above
+# the ΔAICc > 2 threshold. Governance terms add meaningful
+# explanatory value beyond the local baseline.
+# Stage 3 interactions are warranted and interpretable.
+#
+# Contrast with total biomass (ΔAICc = -3.88) where global
+# was worse than local — interactions were untestable there.
+# For browsers, the gate check passes clearly.
+
+# ── Hypothesis 1: MPA effectiveness depends on larval supply ──
+# Well-connected protected sites should recover faster and
+# maintain higher browser biomass than isolated protected sites
+b_int_mpa_conn <- glmmTMB(mean_biomass ~ rugosity_sc +
+                            log_market_gravity_sc +
+                            mpa_status * connectivity_sc,
+                          family = tweedie(link = "log"),
+                          data   = browser_model_data)
+
+# ── Hypothesis 2: MPA effectiveness depends on fishing pressure
+# MPAs should only be detectable where external pressure is
+# low enough that protection translates into biomass difference
+b_int_mpa_press <- glmmTMB(mean_biomass ~ rugosity_sc +
+                             mpa_status * log_market_gravity_sc,
+                           family = tweedie(link = "log"),
+                           data   = browser_model_data)
+
+# ── Hypothesis 3: connectivity buffers fishing pressure ───────
+# Well-connected sites should be more resilient to exploitation
+# through sustained larval replenishment offsetting mortality
+b_int_conn_press <- glmmTMB(mean_biomass ~ rugosity_sc +
+                              log_market_gravity_sc +
+                              connectivity_sc * log_market_gravity_sc,
+                            family = tweedie(link = "log"),
+                            data   = browser_model_data)
+
+# ── Interaction candidate set ─────────────────────────────────
+# Reference: Local + MPA (best supported additive model)
+browser_interactions <- list(
+  "Local + MPA (additive)"  = b_local_mpa,
+  "MPA × connectivity"      = b_int_mpa_conn,
+  "MPA × pressure"          = b_int_mpa_press,
+  "Connectivity × pressure" = b_int_conn_press
+)
+
+cat("\n--- Stage 3: Browser interaction comparison ---\n")
+print(make_aicc_df(browser_interactions))
+
+# ── AICc summary ─────────────────────────────────────────────
+# Local + MPA (additive):  AICc = 828.87, weight = 0.688 — best
+# MPA × connectivity:      ΔAICc = 2.98,  weight = 0.155 — not supported
+# MPA × pressure:          ΔAICc = 3.47,  weight = 0.121 — not supported
+# Connectivity × pressure: ΔAICc = 5.92,  weight = 0.036 — not supported
+#
+# No interaction is supported — the additive Local + MPA
+# model is the best supported model (weight = 0.688) and
+# all interaction models perform worse. ΔAICc > 2 for all
+# interactions relative to the additive baseline.
+# Stage 3 interactions do not improve on the additive model
+# and are not carried forward.
+#
+# Proceed with Local + MPA (b_local_mpa) as the final
+# best-supported model for browser site-level biomass.
+
+# ── Marginal effect plots — Local + MPA (best model) ─────────
+
+# ── Rugosity effect (at mean pressure, reference MPA = none) ──
+rug_grid <- data.frame(
+  rugosity_sc           = seq(min(browser_model_data$rugosity_sc),
+                              max(browser_model_data$rugosity_sc),
+                              length.out = 100),
+  log_market_gravity_sc = 0,
+  mpa_status            = factor("none", levels = c("none", "low", "medium"))
+)
+
+rug_pred <- predict(b_local_mpa,
+                    newdata = rug_grid,
+                    se.fit  = TRUE,
+                    type    = "response",
+                    re.form = NA)
+
+rug_grid$fit <- rug_pred$fit
+rug_grid$lwr <- rug_pred$fit - 1.96 * rug_pred$se.fit
+rug_grid$upr <- rug_pred$fit + 1.96 * rug_pred$se.fit
+
+ggplot(rug_grid, aes(x = rugosity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#2c7bb6", alpha = 0.2) +
+  geom_line(colour = "#2c7bb6", linewidth = 1.1) +
+  labs(x = "Rugosity (standardised)", y = "Browser biomass (g)") +
+  theme_bw(base_size = 13) +
+  theme(axis.title = element_text(face = "bold"))
+
+# ── MPA status effect (at mean rugosity and pressure) ─────────
+mpa_grid <- data.frame(
+  mpa_status            = factor(c("none", "low", "medium"),
+                                 levels = c("none", "low", "medium")),
+  rugosity_sc           = 0,
+  log_market_gravity_sc = 0
+)
+
+mpa_pred <- predict(b_local_mpa,
+                    newdata = mpa_grid,
+                    se.fit  = TRUE,
+                    type    = "response",
+                    re.form = NA)
+
+mpa_grid$fit <- mpa_pred$fit
+mpa_grid$lwr <- mpa_pred$fit - 1.96 * mpa_pred$se.fit
+mpa_grid$upr <- mpa_pred$fit + 1.96 * mpa_pred$se.fit
+
+ggplot(mpa_grid, aes(x = mpa_status, y = fit)) +
+  geom_pointrange(aes(ymin = lwr, ymax = upr),
+                  colour = "#0072B2", size = 0.8) +
+  labs(x = "MPA status", y = "Browser biomass (g)") +
+  theme_bw(base_size = 13) +
+  theme(axis.title = element_text(face = "bold"))
+
+# ── Interpretation ────────────────────────────────────────────
+# No interaction is supported — all three interaction models
+# perform worse than the additive Local + MPA baseline
+# (ΔAICc > 2 for all). The additive model is retained as
+# the final best-supported model for browser site-level
+# biomass.
+#
+# MPA × connectivity (ΔAICc = 2.98): the most biologically
+#   motivated interaction — MPAs more effective when
+#   well-connected — is not supported. MPA and connectivity
+#   appear to operate as independent additive processes
+#   rather than synergistically.
+#
+# MPA × pressure (ΔAICc = 3.47): no evidence that MPA
+#   effectiveness depends on fishing intensity at the
+#   site level when market gravity is used as the pressure
+#   metric. Note this interaction was strongly supported
+#   in an earlier version of this analysis using settlement
+#   gravity — the metric-dependence of this result suggests
+#   caution in interpreting any pressure × MPA signal.
+#
+# Connectivity × pressure (ΔAICc = 5.92): no support for
+#   connectivity buffering fishing pressure through larval
+#   replenishment at the site level.
+#
+# Final model: Local + MPA (b_local_mpa)
+#   Rugosity and MPA medium status are the two significant
+#   drivers of browser biomass. Their effects are additive
+#   and do not depend on spatial context or pressure regime.
+
+# ============================================================
+#  STAGE 4 — SENSITIVITY ANALYSIS
+# ============================================================
+
+# ── (a) Alternative pressure metrics ─────────────────────────
+# Best supported model from Stage 3 is MPA × pressure.
+# Sensitivity models mirror this structure — only pressure
+# metric swapped. MPA × pressure interaction retained to
+# test whether the interaction finding is robust to
+# pressure proxy choice.
+
+b_sens_settgrav <- glmmTMB(mean_biomass ~ rugosity_sc +
+                             mpa_status * log_settlement_grav_sc,
+                           family = tweedie(link = "log"),
+                           data   = browser_model_data)
+
+b_sens_settpop <- glmmTMB(mean_biomass ~ rugosity_sc +
+                            mpa_status * log_settlement_pop_sc,
+                          family = tweedie(link = "log"),
+                          data   = browser_model_data)
+
+cat("\n--- Stage 4a: Browser sensitivity — pressure metrics ---\n")
+cat("Settlement population:\n")
+print(round(summary(b_sens_settgrav)$coefficients$cond, 4))
+cat("\nMarket gravity:\n")
+print(round(summary(b_sens_settpop)$coefficients$cond, 4))
+
+# ── Stage 4a results ──────────────────────────────────────────
+# Sensitivity analysis tests MPA × pressure interaction
+# structure with two alternative pressure metrics.
+# Primary metric (market gravity) uses additive Local + MPA
+# as best model — sensitivity models test whether interactions
+# emerge under alternative metrics.
+#
+# Rugosity: significant and positive across all three metrics
+#   Market gravity (primary): β = +0.513, p < 0.001
+#   Settlement gravity:       β = +0.581, p < 0.001
+#   Settlement pop.:          β = +0.396, p = 0.029
+#   Most robust predictor — unaffected by metric choice.
+#
+# MPA medium main effect:
+#   Market gravity (primary): β = +1.176, p < 0.001 ✓
+#   Settlement gravity:       β = +1.942, p < 0.001 ✓
+#   Settlement pop.:          β = +0.838, p = 0.073 — marginal
+#   Direction consistent but weakens with settlement pop.
+#
+# MPA medium × pressure interaction:
+#   Market gravity (primary): not tested — additive model best
+#   Settlement gravity:       β = +1.958, p < 0.001 ✓
+#   Settlement pop.:          β = -0.695, p = 0.145 — not significant,
+#                             direction reverses
+#
+# The MPA × pressure interaction emerges only with settlement
+# gravity — it is absent with market gravity (primary metric,
+# no interaction supported in Stage 3) and with settlement
+# pop. (non-significant, direction reverses). This metric-
+# dependence confirms the decision to use the additive model
+# as the primary result.
+#
+# Conservative conclusion: the positive effect of medium
+# protection on browser biomass is robust across all three
+# metrics. The MPA × pressure interaction is not a general
+# finding — it is specific to settlement gravity and should
+# not be reported as a primary result. The additive MPA
+# medium effect is the reliable biological signal.
+
+# ── (b) Transect-level replication ───────────────────────────
+# 43% zeros at transect level — Tweedie required.
+# ZI Tweedie tested: if zero inflation test significant
+# AND AICc improves by > 2, ZI Tweedie adopted.
+# Transect sequence mirrors Stage 2 hierarchical structure
+# plus Stage 3 best model (MPA × pressure).
+
+browser_transect_data <- browser_transects %>%
+  left_join(final_predictors, by = "site") %>%
+  mutate(log_browser_biomass = log(transect_browser_biomass + 0.01))
+
+cat("\nTransect zeros:",
+    sum(browser_transect_data$transect_browser_biomass == 0),
+    "/", nrow(browser_transect_data),
+    "(", round(mean(browser_transect_data$transect_browser_biomass == 0), 3), ")\n")
+
+# ── Transect family selection ─────────────────────────────────
+b_trans_tw <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                        log_market_gravity_sc +
+                        connectivity_sc +
+                        mpa_status +
+                        log_chla_sc +
+                        log_max_dhw_sc +
+                        (1 | site),
+                      family = tweedie(link = "log"),
+                      data   = browser_transect_data)
+
+b_trans_tw_zi <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                           log_market_gravity_sc +
+                           connectivity_sc +
+                           mpa_status +
+                           log_chla_sc +
+                           log_max_dhw_sc +
+                           (1 | site),
+                         family    = tweedie(link = "log"),
+                         ziformula = ~1,
+                         data      = browser_transect_data)
+
+b_trans_res    <- simulateResiduals(b_trans_tw,    n = 1000)
+b_trans_res_zi <- simulateResiduals(b_trans_tw_zi, n = 1000)
+
+plot(b_trans_res);    testZeroInflation(b_trans_res)
+plot(b_trans_res_zi); testZeroInflation(b_trans_res_zi)
+
+cat("\n--- Transect family selection ---\n")
+print(make_aicc_df(list(
+  "Tweedie"    = b_trans_tw,
+  "ZI Tweedie" = b_trans_tw_zi
+)))
+
+# ── Transect family selection decision ────────────────────────
+# Standard Tweedie selected over ZI Tweedie.
+#
+# Zero inflation tests:
+#   Tweedie:    ratio = 0.964, p = 0.680 — not significant
+#   ZI Tweedie: ratio = 0.971, p = 0.734 — not significant
+#   Neither model shows evidence of zero inflation —
+#   standard Tweedie handles 43% zeros adequately.
+#
+# AICc:
+#   ZI Tweedie: AICc = 2656.11, weight = 0.633
+#   Tweedie:    ΔAICc = 1.09,   weight = 0.367
+#   ZI Tweedie marginally preferred by AICc but within
+#   ΔAICc < 2 — genuine uncertainty.
+#
+# Proceed: standard Tweedie + (1|site) throughout
+# transect-level browser analyses.
+
+# ── Transect hierarchical sequence ───────────────────────────
+# Mirrors Stage 2 sequence plus Stage 3 interaction model.
+# Key test: does the additive Local + MPA result from the
+# site-level analysis replicate at transect level?
+
+b_trans_null <- glmmTMB(transect_browser_biomass ~ 1 +
+                          (1 | site),
+                        family = tweedie(link = "log"),
+                        data   = browser_transect_data)
+
+b_trans_local <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                           log_market_gravity_sc +
+                           (1 | site),
+                         family = tweedie(link = "log"),
+                         data   = browser_transect_data)
+
+b_trans_local_env <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                               log_market_gravity_sc +
+                               log_chla_sc +
+                               log_max_dhw_sc +
+                               (1 | site),
+                             family = tweedie(link = "log"),
+                             data   = browser_transect_data)
+
+b_trans_local_spatial <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                                   log_market_gravity_sc +
+                                   connectivity_sc +
+                                   (1 | site),
+                                 family = tweedie(link = "log"),
+                                 data   = browser_transect_data)
+
+b_trans_local_mpa <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                               log_market_gravity_sc +
+                               mpa_status +
+                               (1 | site),
+                             family = tweedie(link = "log"),
+                             data   = browser_transect_data)
+
+b_trans_global <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                            log_market_gravity_sc +
+                            connectivity_sc +
+                            mpa_status +
+                            log_chla_sc +
+                            log_max_dhw_sc +
+                            (1 | site),
+                          family = tweedie(link = "log"),
+                          data   = browser_transect_data)
+
+# ── Stage 3 best model at transect level ─────────────────────
+b_trans_mpa_press <- glmmTMB(transect_browser_biomass ~ rugosity_sc +
+                               mpa_status * log_market_gravity_sc +
+                               (1 | site),
+                             family = tweedie(link = "log"),
+                             data   = browser_transect_data)
+
+browser_transect_list <- list(
+  "Null"            = b_trans_null,
+  "Local"           = b_trans_local,
+  "Local + env"     = b_trans_local_env,
+  "Local + spatial" = b_trans_local_spatial,
+  "Local + MPA"     = b_trans_local_mpa,
+  "Global"          = b_trans_global,
+  "MPA × pressure"  = b_trans_mpa_press
+)
+
+cat("\n--- Stage 4b: Browser transect-level sensitivity ---\n")
+print(make_aicc_df(browser_transect_list))
+
+# ── Stage 4b results ──────────────────────────────────────────
+# Results are consistent with the site-level finding —
+# Local + MPA is again the top-ranked model — but model
+# selection uncertainty is high at transect level.
+#
+# Model ranking (transect-level):
+#   Local + MPA:     AICc = 2655.98, weight = 0.238 — best
+#   Local + spatial: ΔAICc = 0.15,   weight = 0.221 — equivalent
+#   Local:           ΔAICc = 0.33,   weight = 0.202 — equivalent
+#   Local + env:     ΔAICc = 1.05,   weight = 0.140 — equivalent
+#   Global:          ΔAICc = 1.21,   weight = 0.130 — equivalent
+#   MPA × pressure:  ΔAICc = 2.86,   weight = 0.057 — not supported
+#   Null:            ΔAICc = 5.72,   weight = 0.014 — worst
+#
+# Five models fall within ΔAICc < 2 — no single model is
+# clearly preferred at transect level. This is a weaker
+# result than the site-level analysis (Local + MPA weight
+# = 0.693) and reflects the additional within-site noise
+# retained at transect resolution diluting between-site
+# predictor signals.
+#
+# Key points:
+# 1. Local + MPA top-ranked at both levels — consistent
+#    qualitative conclusion across analytical scales.
+# 2. MPA × pressure not supported at transect level
+#    (ΔAICc = 2.86) — further confirms the interaction
+#    is not a robust finding.
+# 3. High model uncertainty at transect level is expected:
+#    site-level predictors (rugosity, MPA status, market
+#    gravity) vary between sites, not within them, so
+#    their signal is diluted when within-site transect
+#    variation is retained.
+#
+# Conclusion: the site-level result (Local + MPA best
+# supported) is qualitatively replicated at transect level.
+# The sensitivity analysis supports the primary finding
+# despite higher uncertainty at finer resolution.
+
+
+# ------------------------------------------------------------------------------
 
 # ============================================================
 #  PART 3 — TRANSECT-LEVEL COUNTS (COMPLEMENTARY ANALYSIS)
@@ -977,7 +1147,7 @@ transect_model_data %>%
 
 m_count_poisson <- glmmTMB(
   transect_browser_count ~ rugosity_sc +
-    log_settlement_grav_sc +
+    log_market_gravity_sc +
     log_chla_sc +
     log_max_dhw_sc +
     (1 | site),
@@ -987,7 +1157,7 @@ m_count_poisson <- glmmTMB(
 
 m_count_nb2 <- glmmTMB(
   transect_browser_count ~ rugosity_sc +
-    log_settlement_grav_sc +
+    log_market_gravity_sc +
     log_chla_sc +
     log_max_dhw_sc +
     (1 | site),
@@ -997,7 +1167,7 @@ m_count_nb2 <- glmmTMB(
 
 m_count_nb1 <- glmmTMB(
   transect_browser_count ~ rugosity_sc +
-    log_settlement_grav_sc +
+    log_market_gravity_sc +
     log_chla_sc +
     log_max_dhw_sc +
     (1 | site),
@@ -1034,13 +1204,13 @@ print(make_aicc_df(list(
 count_family <- nbinom1(link = "log") # update after family selection
 
 re_c_null <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
+                       log_market_gravity_sc +
                        log_chla_sc +
                        log_max_dhw_sc,
                      family = count_family, data = transect_model_data)
 
 re_c_site <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
+                       log_market_gravity_sc +
                        log_chla_sc +
                        log_max_dhw_sc +
                        (1 | site),
@@ -1061,25 +1231,25 @@ c_m1_hab <- glmmTMB(transect_browser_count ~ rugosity_sc +
                     family = count_family, data = transect_model_data)
 
 c_m2_hab_press <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                            log_settlement_grav_sc +
+                            log_market_gravity_sc +
                             (1 | site),
                           family = count_family, data = transect_model_data)
 
 c_m3_hab_press_mpa <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                                log_settlement_grav_sc +
+                                log_market_gravity_sc +
                                 mpa_status +
                                 (1 | site),
                               family = count_family, data = transect_model_data)
 
 c_m4_conn <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
+                       log_market_gravity_sc +
                        mpa_status +
                        connectivity_sc +
                        (1 | site),
                      family = count_family, data = transect_model_data)
 
 c_m5_chla <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                       log_settlement_grav_sc +
+                       log_market_gravity_sc +
                        mpa_status +
                        connectivity_sc +
                        log_chla_sc +
@@ -1087,7 +1257,7 @@ c_m5_chla <- glmmTMB(transect_browser_count ~ rugosity_sc +
                      family = count_family, data = transect_model_data)
 
 c_m6_dhw <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                      log_settlement_grav_sc +
+                      log_market_gravity_sc +
                       mpa_status +
                       connectivity_sc +
                       log_max_dhw_sc +
@@ -1095,20 +1265,20 @@ c_m6_dhw <- glmmTMB(transect_browser_count ~ rugosity_sc +
                     family = count_family, data = transect_model_data)
 
 c_m7_mpa_conn <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                           log_settlement_grav_sc +
+                           log_market_gravity_sc +
                            mpa_status * connectivity_sc +
                            (1 | site),
                          family = count_family, data = transect_model_data)
 
 c_m8_mpa_press <- glmmTMB(transect_browser_count ~ rugosity_sc +
-                            mpa_status * log_settlement_grav_sc +
+                            mpa_status * log_market_gravity_sc +
                             connectivity_sc +
                             (1 | site),
                           family = count_family, data = transect_model_data)
 
 c_m9_conn_press <- glmmTMB(transect_browser_count ~ rugosity_sc +
                              mpa_status +
-                             connectivity_sc * log_settlement_grav_sc +
+                             connectivity_sc * log_market_gravity_sc +
                              (1 | site),
                            family = count_family, data = transect_model_data)
 

@@ -408,128 +408,64 @@ locations_2015_with_city$market_grav = locations_2015_with_city$nearest_city_pop
 
 ```
 
-# Settlement Gravity
-
-This is getting the sum of the population in a 50km radius
+# Settlement Population
+This is getting the sum of the population in a 25km radius
 
 ```{r}
-library(terra)
-library(sf)
-library(here)
+# ── Settlement population metric ──────────────────────────────
+# 25km radius — reflects typical maximum SSF fishing
+# range in the WIO. 
 
-# --- load rasters (you already do this)
+# Load rasters
 landscan_2010 <- rast(here::here("city_data", "landscan-global-2010.tif"))
 landscan_2015 <- rast(here::here("city_data", "landscan-global-2015.tif"))
 
-# crop (you already do this)
+# Crop to AOI
 landscan_crop_2010 <- crop(landscan_2010, aoi)
 landscan_crop_2015 <- crop(landscan_2015, aoi)
 
-# --- Convert sf -> SpatVector (no geom/crs args because locations_with_grav_* are sf)
-points_2010 <- terra::vect(locations_with_city_2010)
-points_2015 <- terra::vect(locations_with_city_2015)
+# Convert sf -> SpatVector and reproject
+points_2010 <- terra::project(
+  terra::vect(locations_with_city_2010),
+  crs(landscan_crop_2010)
+)
+points_2015 <- terra::project(
+  terra::vect(locations_with_city_2015),
+  crs(landscan_crop_2015)
+)
 
-# --- Reproject the points to the raster CRS (cheap; do this BEFORE calling the function)
-rcrs_2010 <- crs(landscan_crop_2010)
-rcrs_2015 <- crs(landscan_crop_2015)
-
-points_2010 <- terra::project(points_2010, rcrs_2010)
-points_2015 <- terra::project(points_2015, rcrs_2015)
-
-# --- Simplified function that accepts the correct points object
-calc_settlement_total_pop <- function(landscan_crop, points, locations_with_city, buffer_m = 50000) {
-  # Assumes points are already in same CRS as landscan_crop and CRS units are meters
-  # buffers <- buffer(points_m, width = 50000)
+# Function accepts buffer_m for flexible radius
+calc_settlement_total_pop <- function(landscan_crop, points,
+                                      locations_with_city,
+                                      buffer_m = 25000) {
   buffers <- terra::buffer(points, width = buffer_m)
 
-  # Extract sum — terra::extract returns a data.frame: ID + aggregated column(s)
-  pop_sum_df <- terra::extract(landscan_crop, buffers, fun = \(x) sum(x, na.rm = TRUE))
+  pop_sum_df <- terra::extract(landscan_crop, buffers,
+                               fun = \(x) sum(x, na.rm = TRUE))
 
-  if (ncol(pop_sum_df) < 2) stop("extract() did not return an aggregated column. Inspect pop_sum_df")
+  if (ncol(pop_sum_df) < 2)
+    stop("extract() did not return an aggregated column.")
 
-  # aggregated population values are in second column
   pop_values <- pop_sum_df[[2]]
 
-  # Defensive check: lengths must match
-  if (length(pop_values) != nrow(locations_with_city)) {
+  if (length(pop_values) != nrow(locations_with_city))
     stop("Length mismatch: extract returned ", length(pop_values),
-         " values but locations_with_grav has ", nrow(locations_with_city), " rows.")
-  }
+         " values but locations has ", nrow(locations_with_city), " rows.")
 
   locations_with_city$settlement_tot_pop <- pop_values
   return(locations_with_city)
 }
 
-# --- Call the function using the matching points for each year
+# 25km radius
 locations_with_settlement_2010 <- calc_settlement_total_pop(
-  landscan_crop_2010,
-  points_2010,
-  locations_2010_with_city
+  landscan_crop_2010, points_2010,
+  locations_with_city_2010, buffer_m = 25000
 )
 
 locations_with_settlement_2015 <- calc_settlement_total_pop(
-  landscan_crop_2015,
-  points_2015,
-  locations_2015_with_city
+  landscan_crop_2015, points_2015,
+  locations_with_city_2015, buffer_m = 25000
 )
-
-```
-
-```{r}
-
-# # OLD CODE
-# # Load raster
-# landscan_2010 <- rast(here::here("city_data", "landscan-global-2010.tif"))
-# landscan_2015 <- rast(here::here("city_data", "landscan-global-2015.tif"))
-# 
-# 
-# #Test checks:
-# #aoi2 <- ext(39.170, 39.358, -6.965, -6.718) #slightly bigger area
-# #landscan_crop2 <- crop(landscan, aoi2)
-# #message(global(landscan_crop2, fun = "sum", na.rm = TRUE)
-# #)
-# 
-# 
-# # Crop 
-# landscan_crop_2010 <- crop(landscan_2010, aoi)
-# landscan_crop_2015 <- crop(landscan_2015, aoi)
-# #plot(landscan_crop_2015)
-# #res(landscan_crop_2015)
-# 
-# 
-# # Convert points
-# points <- vect(
-#   location_2009,
-#   geom = c("longitude", "latitude"),
-#   crs = "EPSG:4326"
-# )
-# 
-# calc_settlement_total_pop <- function(landscan_crop, locations_with_grav){
-#   # Project BOTH raster and points to a metric CRS
-#   landscan_m <- project(landscan_crop, "EPSG:54009")   # World Mollweide
-#   
-#   points_m   <- project(points, crs(landscan_m))
-#   
-#   # Create 50 km buffers (meters!)
-#   buffers <- buffer(points_m, width = 50000)
-#   
-#   # Extract population
-#   pop_sum <- extract(
-#     landscan_m,
-#     buffers,
-#     fun = sum,
-#     na.rm = TRUE
-#   )
-#   
-#   # Assign correctly by name
-#   locations_with_grav$settlement_tot_pop <- pop_sum$lspop2010
-#   
-#   locations_with_grav
-# }
-# 
-# 
-# locations_with_grav_2010 <- calc_settlement_total_pop(landscan_crop_2010, locations_with_grav_2010)
-# locations_with_grav_2015 <- calc_settlement_total_pop(landscan_crop_2015, locations_with_grav_2015)
 
 ```
 
@@ -546,7 +482,11 @@ plot(landscan_zoomed)
 max(landscan_zoomed)
 ```
 
-This gets the nearest cell with population density 75
+## Settlement gravity metric 
+Finds nearest LandScan cell with density ≥ 75 people/km²,extracts population within 
+2km of that cell, and computes gravity as population / travel_cost_distance².
+Threshold of 75 people/km² validated by Cinner et al. (2016) sensitivity analysis 
+as the optimal peri-urban settlement threshold for reef fish biomass prediction.
 
 ```{r}
 landscan_crop_2010 <- project(landscan_crop_2010, "EPSG:3857")
@@ -688,33 +628,6 @@ locations_with_all_2015 <- calc_closest_settlement_pop(locations_with_grav_2015,
 ```
 
 ```{r}
-
-calc_settlement_grav <- function(locations_with_all){
-    locations_with_all$nearest_pop_cost_distance <- mapply(
-      cost_between_points,
-      locations_with_all$longitude,
-      locations_with_all$latitude,
-      locations_with_all$nearest_pop75_lon,
-      locations_with_all$nearest_pop75_lat, 
-      MoreArgs = list(transition_graph = transition_graph, friction_raster = friction_raster)
-    )
-    
-    #Set a minimum value of 0.005 (as some are 0)
-    locations_with_all$nearest_pop_cost_distance <- pmax(locations_with_all$nearest_pop_cost_distance, 0.005)
-    
-    locations_with_all$nearest_pop75_grav = locations_with_all$nearest_settlement_pop / (locations_with_all$nearest_pop_cost_distance ^ 2)
-    
-    return(locations_with_all)
-}
-
-locations_with_grav_2010_final <- calc_settlement_grav(locations_with_all_2010)
-locations_with_grav_2015_final <- calc_settlement_grav(locations_with_all_2015)
-
-```
-
-```{r}
-
-# OR TRY:
 
  calc_settlement_grav <- function(locations_with_grav){
   tmp <- mapply(cost_between_points,

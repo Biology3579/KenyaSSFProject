@@ -641,14 +641,14 @@ print(make_aicc_df(list(
 # ── Q1 results ────────────────────────────────────────────────
 #
 # Without connectivity control:
-#   Settlement gravity: AICc = 101.36, weight = 0.878 (SELECTED)
-#   Settlement pop.:    ΔAICc = 4.92,  weight = 0.075
-#   Market gravity:     ΔAICc = 5.86,  weight = 0.047
+#   Settlement gravity: AICc = 101.36, weight = 0.910 (SELECTED)
+#   Market gravity:     ΔAICc = 5.86,  weight = 0.048
+#   Settlement pop.:    ΔAICc = 6.17,  weight = 0.042
 #
 # With connectivity control:
-#   Settlement gravity: AICc = 103.77, weight = 0.881 (SELECTED)
-#   Settlement pop.:    ΔAICc = 5.02,  weight = 0.071
-#   Market gravity:     ΔAICc = 5.84,  weight = 0.048
+#   Settlement gravity: AICc = 103.77, weight = 0.911 (SELECTED)
+#   Market gravity:     ΔAICc = 5.84,  weight = 0.049
+#   Settlement pop.:    ΔAICc = 6.24,  weight = 0.040
 #
 # Settlement gravity is the best-supported pressure metric
 # regardless of whether connectivity is included as a control.

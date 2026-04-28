@@ -33,6 +33,7 @@ library(here)        # file paths
 library(spdep)       # spatial autocorrelation
 library(lme4)        # RE structure tests + transect sensitivity
 library(car)         # VIFs
+library(performance) # Tweedie VIFs
 
 
 # ── FUNCTIONS ─────────────────────────────────────────────────
@@ -188,6 +189,7 @@ location_sites <- location_data %>%
   summarise(
     mpa_status   = first(mpa_status),
     connectivity = mean(prop_connectivity, na.rm = TRUE),
+    ecoregion    = first(ecoregion),  
     .groups = "drop"
   )
 
@@ -211,6 +213,7 @@ raw_predictors <- location_sites %>%
 transformed_predictors <- raw_predictors %>%
   transmute(
     site                = site,
+    ecoregion           = ecoregion,
     rugosity            = rugosity,
     log_settlement_grav = log(settlement_grav),
     log_settlement_pop  = log(settlement_pop),
@@ -230,6 +233,7 @@ transformed_predictors <- raw_predictors %>%
 scaled_predictors <- transformed_predictors %>%
   transmute(
     site                   = site,
+    ecoregion              = ecoregion,
     rugosity_sc            = as.numeric(scale(rugosity)),
     log_settlement_grav_sc = as.numeric(scale(log_settlement_grav)),
     log_settlement_pop_sc  = as.numeric(scale(log_settlement_pop)),
@@ -249,6 +253,7 @@ scaled_predictors <- transformed_predictors %>%
 final_predictors <- scaled_predictors %>%
   dplyr::select(
     site,
+    ecoregion,
     rugosity_sc,                # BASELINE    — habitat complexity
     log_settlement_grav_sc,     # Q1/Q2/Q3   — primary pressure (total biomass)
     log_chla_sc,                # BASELINE    — productivity

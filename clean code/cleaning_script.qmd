@@ -200,7 +200,7 @@ clean_location_connectivity <- connectivity_master_location_raw %>%
   clean_column_names() %>%
   # standardise textual columns
   standardize_text(c("station", "site", "location",
-      "country", "orientation", "geology",
+      "country", "ecoregion", "orientation", "geology",
       "reef_geomorphology", "reef_type")) %>% 
   convert_column_types(
     date_cols = intersect(c("date"), names(.)),
@@ -215,7 +215,7 @@ clean_location_connectivity <- connectivity_master_location_raw %>%
     
     # columns that should be factors (categorical)
     factor_cols = intersect(c("station", "site", 
-      "location", "country", "orientation", "geology",
+      "location", "country", "ecoregion", "orientation", "geology",
       "reef_geomorphology", "reef_type"), names(.))) %>%
     
 # Handle mpa_status explicitly with correct ordered levels

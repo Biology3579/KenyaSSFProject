@@ -170,7 +170,6 @@ cat("Proportion of zeros:", round(zeros, 3), "\n")
 qqnorm(site_data$mean_biomass,
        main = "Q-Q plot: Mean biomass per site)")
 qqline(site_data$mean_biomass, col = "red")
-shapiro.test(site_data$mean_biomass)
 # Raw biomass
 cat("\n--- Shapiro-Wilk: raw biomass ---\n")
 shapiro.test(site_data$mean_biomass)
@@ -395,7 +394,10 @@ ggplot(corr_long, aes(x = x, y = y, fill = corr)) +
 
 # Collinearity notes
 #
-## Gravity metrics r = 0.66–0.54
+## Gravity metrics r = 
+##  Setll grav and setll pop: 0.66
+##  Sett grav and markget grav: 0.54
+##  Sett pop and marjket grav: 0.65
 #   Moderate positive, but this was expected as they all proxy the same construct
 #   Only one used per model so no issues here
 #
@@ -405,22 +407,6 @@ ggplot(corr_long, aes(x = x, y = y, fill = corr)) +
 #   Note that this is typically for coastal sites.
 #   Negative — productive sites tend to be more remote and less fished. 
 #   Monitor chla coefficient in models including settlement gravity simultaneously.
-#
-# MPA vs settlement pop.: r = -0.41
-#   Negative association with population-based metric than with settlement gravity 
-#   Consistent again with MPAs placed away from densely populated areas.
-#
-# CONNECTIVITY vs market gravity: r = 0.30
-#   Weak positive — more connected sites tend to be near
-#   larger markets. Acceptable; monitor in models including
-#   both terms.
-#
-# CONNECTIVITY vs chla: r = -0.30
-#   Weak negative — more connected sites tend to be less
-#   productive. No inference concern.
-#
-# RUGOSITY: all |r| ≤ 0.19 — orthogonal to all predictors.
-# CONNECTIVITY: all |r| ≤ 0.34 — no blocking collinearity.
 #
 # No blocking collinearity. All pairwise |r| < 0.60.
 # Gravity metrics handled by single-metric-per-model rule.
@@ -502,57 +488,91 @@ print(table(total_model_data$mpa_status))
 
 
 # ── Variance inflation factors ────────────────────────────────
-# Confirms pairwise correlations do not translate into
-# meaningful variance inflation in multivariate models.
-# Checked at each stage predictors are added.
+# VIFs are a property of the predictor set, not the response
+# variable or model family. Computed once here on lm() objects
+# with identical predictor structures to those used throughout
+# Q1-Q3 across all response variables (total biomass and all
+# functional groups). Applies to Tweedie GLMs equally since
+# collinearity is determined by the design matrix alone.
+#
+# Gravity metrics are never included simultaneously
+# (single-metric-per-model rule), so VIFs are checked
+# separately for each metric at the baseline + pressure stage.
+# All subsequent stages use settlement gravity as the
+# selected metric (established in Q1).
+#
+# Checked at each stage of the sequential model framework.
 
 cat("\n--- VIF: baseline ---\n")
 vif(lm(log_mean_biomass ~ rugosity_sc +
          log_chla_sc,
        data = total_model_data))
 
-cat("\n--- VIF: baseline + pressure ---\n")
+cat("\n--- VIF: baseline + settlement gravity ---\n")
 vif(lm(log_mean_biomass ~ rugosity_sc +
          log_chla_sc +
          log_settlement_grav_sc,
        data = total_model_data))
 
-cat("\n--- VIF: baseline + pressure + connectivity ---\n")
+cat("\n--- VIF: baseline + market gravity ---\n")
+vif(lm(log_mean_biomass ~ rugosity_sc +
+         log_chla_sc +
+         log_market_gravity_sc,
+       data = total_model_data))
+
+cat("\n--- VIF: baseline + settlement population ---\n")
+vif(lm(log_mean_biomass ~ rugosity_sc +
+         log_chla_sc +
+         log_settlement_pop_sc,
+       data = total_model_data))
+
+cat("\n--- VIF: baseline + settlement gravity + connectivity ---\n")
 vif(lm(log_mean_biomass ~ rugosity_sc +
          log_chla_sc +
          log_settlement_grav_sc +
          connectivity_sc,
        data = total_model_data))
 
-cat("\n--- VIF: baseline + pressure + MPA ---\n")
+cat("\n--- VIF: baseline + settlement gravity + MPA ---\n")
 vif(lm(log_mean_biomass ~ rugosity_sc +
          log_chla_sc +
          log_settlement_grav_sc +
          mpa_status,
        data = total_model_data))
 
-#  Collinearity:
-#  Pairwise correlations checked via correlation matrix.
-#  VIF checked at three stages:
-#    Baseline (rugosity + chla):
-#      rugosity VIF = 1.000, chla VIF = 1.000
-#      Baseline predictors completely orthogonal.
-#    Baseline + pressure:
-#      rugosity VIF = 1.011, chla VIF = 1.427,
-#      settlement gravity VIF = 1.438
-#    Baseline + pressure + connectivity:
-#      rugosity VIF = 1.012, chla VIF = 1.486,
-#      settlement gravity VIF = 1.446,
-#      connectivity VIF = 1.090
-#    Baseline + pressure + MPA:
-#      rugosity GVIF^(1/(2*Df)) = 1.011 — no concern
-#      chla GVIF^(1/(2*Df)) = 1.259 — no concern
-#      settlement gravity GVIF^(1/(2*Df)) = 1.377 — no concern
-#      mpa_status GVIF^(1/(2*Df)) = 1.073 — no concern
-#      (GVIF reported for factor predictors — equivalent
-#      to VIF for continuous predictors when Df = 1)
-#  All VIFs/GVIFs < 2.0 at every stage — no multicollinearity
-#  concern throughout Q1–Q3 model sequence.
+#  #  Results:
+#  Baseline (rugosity + chla):
+#    rugosity VIF = 1.000, chla VIF = 1.000
+#    Baseline predictors completely orthogonal.
+#
+#  Baseline + settlement gravity:
+#    rugosity VIF = 1.011, chla VIF = 1.427,
+#    settlement gravity VIF = 1.438
+#
+#  Baseline + market gravity:
+#    rugosity VIF = 1.050, chla VIF = 1.111,
+#    market gravity VIF = 1.161
+#
+#  Baseline + settlement population:
+#    rugosity VIF = 1.036, chla VIF = 1.031,
+#    settlement population VIF = 1.067
+#
+#  Baseline + settlement gravity + connectivity:
+#    rugosity VIF = 1.012, chla VIF = 1.486,
+#    settlement gravity VIF = 1.446,
+#    connectivity VIF = 1.090
+#
+#  Baseline + settlement gravity + MPA:
+#    rugosity GVIF^(1/(2*Df)) = 1.011 — no concern
+#    chla GVIF^(1/(2*Df)) = 1.259 — no concern
+#    settlement gravity GVIF^(1/(2*Df)) = 1.377 — no concern
+#    mpa_status GVIF^(1/(2*Df)) = 1.073 — no concern
+#    (GVIF reported for factor predictors — equivalent
+#    to VIF for continuous predictors when Df = 1)
+#
+#  All VIFs/GVIFs < 2.0 at every stage and across all
+#  three pressure metrics — no multicollinearity concern
+#  throughout Q1-Q3 model sequence for any response variable.
 
 # ============================================================
 #  MODEL FAMILY SELECTION
@@ -778,23 +798,6 @@ print(confint(q1_settgrav))
 #     (r = -0.54, confirmed non-spatial in diagnostics)
 #   Model: F(3,50) = 5.253, p = 0.003, R² = 0.240, adj. R² = 0.194
 
-# ── Direction check for market gravity ───────────────────────
-# Confirms pressure signal consistent in direction across
-# metrics — failure to reach significance reflects metric
-# choice, not absence of a pressure effect.
-# Full sensitivity in Sensitivity (a).
-
-cat("\n--- Q1: Market gravity direction check ---\n")
-summary(q1_mktgrav)$coefficients["log_market_gravity_sc", ]
-
-# Results:  b = -0.086, p = 0.346 ns
-#   Consistent direction with settlement gravity
-#   but effect size one third as large (-0.086 vs -0.251)
-#   and not significant. Confirms settlement gravity
-#   is the correct metric choice — the pressure signal
-#   is detectable with residential proximity but not
-#   with commercial market access in this SSF system.
-#   Kept for sensititvity later. 
 
 # ── Best Q1 model ─────────────────────────────────────────────
 # rugosity + chla + settlement gravity
@@ -840,26 +843,11 @@ print(make_aicc_df(list(
   "Best Q1 + conn"       = m_q2_conn
 )))
 
-cat("\n--- Q2 Step 1: Connectivity coefficients ---\n")
-summary(m_q2_conn)
-
 # Q2 Step 1 results:
 #   Best Q1:         AICc = 101.36, weight = 0.770
 #   Best Q1 + conn:  DAICc = 2.41,  weight = 0.230
 #   Connectivity not supported as main effect.
 #
-#   Connectivity: b = +0.028, p = 0.739 — near zero,
-#     not significant. No independent effect on biomass
-#     once habitat and pressure controlled.
-#   Rugosity:     b = +0.216, p = 0.010 — stable
-#   Pressure:     b = -0.253, p = 0.013 — stable
-#
-#   Directly extends Warmuth et al. (2024): connectivity
-#   signal on herbivore abundance does not translate to
-#   total biomass once fishing pressure included as
-#   covariate. Larval supply does not independently
-#   subsidise total reef fish biomass at this spatial
-#   scale in this SSF-dominated system.
 
 
 # ── Q2 Step 2: Does connectivity modify pressure effects? ─────
@@ -880,8 +868,9 @@ summary(m_q2_conn)
 
 m_q2_conn_int <- lm(log_mean_biomass ~ rugosity_sc +
                       log_chla_sc +
-                      connectivity_sc *
-                      log_settlement_grav_sc,
+                      log_settlement_grav_sc +
+                      connectivity_sc +
+                      log_settlement_grav_sc:connectivity_sc,
                     data = total_model_data)
 
 cat("\n--- Q2 Step 2: Connectivity x pressure interaction ---\n")
@@ -890,6 +879,8 @@ print(make_aicc_df(list(
   "Best Q1 + conn x pressure" = m_q2_conn_int
 )))
 
+#Somewhat supported! Delta AICc: 1.06
+
 cat("\n--- Q2 Step 2: Interaction coefficients ---\n")
 summary(m_q2_conn_int)
 
@@ -897,22 +888,26 @@ summary(m_q2_conn_int)
 cat("\n--- 95% CIs: Connectivity x pressure interaction ---\n")
 print(confint(m_q2_conn_int))
 
+# Note: for Gaussian lm this equals R²
+# Interaction model R² = 0.296 (from summary above)
+
+# DAICc = 1.06, weight = 0.312, meaning??
 
 
-# Expected:
-#   Interaction not supported (DAICc > 2 vs best Q1)
-#   Interaction term: b = -0.225, p = 0.060 — marginal
-#   and in WRONG direction — negative sign suggests
-#   connectivity amplifies rather than buffers pressure,
-#   contrary to hypothesis. Not interpretable as
-#   buffering mechanism.
+# So: 
+# # Connectivity showed no independent main effect,
+# but there was weak support for a connectivity ×
+# pressure interaction (ΔAICc = 1.06; p = 0.060).
+# Because support was modest and confidence intervals
+# overlapped zero, the simpler Q1 model was retained
+# as the primary model for Q3.
+# ----
 
 # ── Best Q2 model ─────────────────────────────────────────────
 # Connectivity not supported as main effect or interaction.
 # Best Q2 model = best Q1 model (unchanged).
 # Reference model for Q3.
 m_best_q2 <- m_best_q1
-
 
 # ============================================================
 #  Q3 — FORMAL PROTECTION
@@ -938,6 +933,56 @@ m_best_q2 <- m_best_q1
 #  (Cinner et al. 2016).
 # ============================================================
 
+# ── 1. MPA placement characterisation ───────────────────────────
+# Tests whether MPA categories differ systematically in
+# human pressure and connectivity context.
+# Kruskal-Wallis for each variable, pairwise Wilcoxon
+# with Bonferroni correction where significant.
+
+cat("\n--- MPA placement: settlement gravity ---\n")
+kruskal.test(log_settlement_grav_sc ~ mpa_status, 
+             data = total_model_data)
+pairwise.wilcox.test(total_model_data$log_settlement_grav_sc,
+                     total_model_data$mpa_status,
+                     p.adjust.method = "bonferroni")
+
+cat("\n--- MPA placement: market gravity ---\n")
+kruskal.test(log_market_gravity_sc ~ mpa_status,
+             data = total_model_data)
+pairwise.wilcox.test(total_model_data$log_market_gravity_sc,
+                     total_model_data$mpa_status,
+                     p.adjust.method = "bonferroni")
+
+cat("\n--- MPA placement: settlement population ---\n")
+kruskal.test(log_settlement_pop_sc ~ mpa_status,
+             data = total_model_data)
+pairwise.wilcox.test(total_model_data$log_settlement_pop_sc,
+                     total_model_data$mpa_status,
+                     p.adjust.method = "bonferroni")
+
+cat("\n--- MPA placement: connectivity ---\n")
+kruskal.test(connectivity_sc ~ mpa_status,
+             data = total_model_data)
+pairwise.wilcox.test(total_model_data$connectivity_sc,
+                     total_model_data$mpa_status,
+                     p.adjust.method = "bonferroni")
+
+# MPA placement results summary:
+# Settlement gravity: H = 10.679, p = 0.005
+#   medium vs none: p = 0.066 (marginal, ns after Bonferroni)
+#   medium vs low:  p = 0.002 **
+#   low vs none:    p = 0.859 ns
+# Market gravity: H = 2.006, p = 0.367 — no differences
+# Settlement population: H = 12.296, p = 0.002
+#   medium vs none: p = 0.021 *
+#   medium vs low:  p = 0.010 *
+#   low vs none:    p = 0.275 ns
+# Connectivity: H = 11.552, p = 0.003
+#   low vs none:    p = 0.033 *
+#   medium vs none: p = 0.013 *
+#   low vs medium:  p = 1.000 ns
+
+# ── 2. Testing Outcomes of protection across enforcement categories ──────────────────────────
 m_q3_mpa <- lm(log_mean_biomass ~ rugosity_sc +
                  log_chla_sc +
                  log_settlement_grav_sc +
@@ -955,6 +1000,19 @@ summary(m_q3_mpa)
 
 cat("\n--- Q3: MPA model confint ---\n")
 print(confint(m_q3_mpa))
+
+# Mean predictor values by MPA category
+cat("\n--- Mean predictor values by MPA category ---\n")
+total_model_data %>%
+  group_by(mpa_status) %>%
+  summarise(
+    mean_settlement_grav = mean(log_settlement_grav_sc, na.rm = TRUE),
+    mean_market_grav = mean(log_market_gravity_sc, na.rm = TRUE),
+    mean_settlement_pop = mean(log_settlement_pop_sc, na.rm = TRUE),
+    mean_connectivity = mean(connectivity_sc, na.rm = TRUE),
+    n = n()
+  ) %>%
+  print()
 
 # Q3 results:
 #   Best Q2:       AICc = 101.36, weight = 0.819
@@ -976,6 +1034,15 @@ print(confint(m_q3_mpa))
 #
 #   Best model throughout: rugosity + chla +
 #   settlement gravity (m_best_q1 = m_best_q2 = m_best_q3)
+#   
+
+m_best_q3 <- m_best_q2
+
+# R² and adjusted R² for best model
+cat("\n--- Model fit: R² ---\n")
+cat(sprintf("R² = %.3f\n", summary(m_best_q1)$r.squared))
+cat(sprintf("Adj. R² = %.3f\n", summary(m_best_q1)$adj.r.squared))
+
 
 # ============================================================
 #  SPATIAL AUTOCORRELATION CHECK
@@ -1022,55 +1089,7 @@ print(moran.test(residuals(m_best_q2), listw5))
 # conclusions unlikely to change given effect sizes
 # and consistency across model specifications.
 
-# ============================================================
-#  SENSITIVITY ANALYSIS
-# ============================================================
-
-# ── (a) Alternative pressure metrics ─────────────────────────
-# Mirrors baseline structure — only pressure metric swapped.
-# Purpose: robustness check, not model selection.
-# AICc comparison not reported here — see Q1 for metric
-# selection. 
-# Coefficients confirm conclusions are not metric-dependent.
-
-sens_mktgrav <- lm(log_mean_biomass ~ rugosity_sc +
-                     log_market_gravity_sc +
-                     log_chla_sc,
-                   data = total_model_data)
-
-sens_settpop  <- lm(log_mean_biomass ~ rugosity_sc +
-                      log_settlement_pop_sc +
-                      log_chla_sc,
-                    data = total_model_data)
-
-cat("\n--- Sensitivity (a): alternative pressure metrics ---\n")
-cat("Market gravity:\n")
-print(summary(sens_mktgrav)$coefficients)
-cat("\nSettlement population:\n")
-print(summary(sens_settpop)$coefficients)
-
-# Sensitivity (a): alternative pressure metrics
-# Purpose: confirm Q1 conclusions are not metric-dependent.
-# Both alternatives substituted into baseline structure.
-# AICc comparison not repeated — metric selected in Q1.
-# Coefficients confirm direction consistent across metrics.
-#
-# Market gravity:       b = -0.086, p = 0.346 ns
-# Settlement pop.:      b = -0.067, p = 0.439 ns
-#
-# Both negative — pressure signal consistent in direction.
-# Neither significant — pressure only detectable with
-# settlement gravity. Effect size approximately one third
-# (market) and one quarter (population) of settlement
-# gravity — confirms residential proximity weighted by
-# distance captures SSF exploitation footprint more
-# precisely than market access or aggregate population.
-# Rugosity significant and stable across all three metrics
-# (b = 0.220-0.225, p < 0.05) — habitat signal robust
-# to pressure metric choice.
-
-# ============================================================
-#  SENSITIVITY ANALYSIS (b) — TRANSECT-LEVEL REPLICATION
+#  SENSITIVITY ANALYSIS — TRANSECT-LEVEL REPLICATION
 #
 #  Purpose: confirm that site-level Q1-Q3 conclusions are
 #  not an artefact of spatial aggregation. Replicates the
@@ -1207,6 +1226,7 @@ print(make_aicc_df(list(
 cat("\n--- Sensitivity (b): pressure model coefficients (REML) ---\n")
 summary(sens_t_pressure)
 
+print(confint(sens_t_pressure))
 # ── Diagnostics on pressure model (supplementary) ────────────
 # Confirms Gaussian lmer remains appropriate after addition
 # of settlement gravity. Reported in supplementary materials.
@@ -1331,7 +1351,7 @@ results_summary <- tribble(
   "Q1 effect",    "Significant",    "b = -0.251, p = 0.012",
   "Q1 rugosity",  "Significant",    "b = +0.216, p = 0.009 — stable throughout",
   "Q2 main",      "Not supported",  "DAICc = 2.41, weight = 0.230, b = +0.028, p = 0.739",
-  "Q2 int",       "Not supported",  "DAICc = 1.06, weight = 0.312, wrong direction b = -0.225, p = 0.060",
+  "Q2 int",       "Not supported",  "DAICc = 1.06, weight = 0.371, wrong direction b = -0.225, p = 0.060",
   "Q3 MPA",       "Not supported",  "DAICc = 3.01, weight = 0.182, low ns, medium ns",
   "Sensitivity a","Consistent",     "market b = -0.086 ns, pop b = -0.067 ns — direction consistent",
   "Sensitivity b","Consistent",     "model ordering identical, rugosity and pressure stable"
@@ -1347,3 +1367,143 @@ print(results_summary)
 cat("\n--- Session info ---\n")
 sessionInfo()
 
+# ============================================================
+#  FIGURE 1 — Total biomass marginal effects
+#  Shared horizontal y-axis label using gridExtra + textGrob
+# ============================================================
+
+library(ggplot2)
+library(gridExtra)
+library(grid)
+
+# ── Colour palette ────────────────────────────────────────────
+col_pressure     <- "#C0392B"
+col_connectivity <- "#2980B9"
+col_rugosity     <- "#27AE60"
+col_chla         <- "#F39C12"
+col_mpa          <- "#8E44AD"
+
+# ── Prediction grids ──────────────────────────────────────────
+sg_grid <- data.frame(
+  log_settlement_grav_sc = seq(
+    min(total_model_data$log_settlement_grav_sc),
+    max(total_model_data$log_settlement_grav_sc),
+    length.out = 200),
+  rugosity_sc = 0,
+  log_chla_sc = 0
+)
+
+sg_pred     <- predict(m_best_q1, newdata = sg_grid, se.fit = TRUE)
+sg_grid$fit <- sg_pred$fit
+sg_grid$lwr <- sg_pred$fit - 1.96 * sg_pred$se.fit
+sg_grid$upr <- sg_pred$fit + 1.96 * sg_pred$se.fit
+
+rug_grid <- data.frame(
+  rugosity_sc = seq(
+    min(total_model_data$rugosity_sc),
+    max(total_model_data$rugosity_sc),
+    length.out = 200),
+  log_settlement_grav_sc = 0,
+  log_chla_sc = 0
+)
+
+rug_pred     <- predict(m_best_q1, newdata = rug_grid, se.fit = TRUE)
+rug_grid$fit <- rug_pred$fit
+rug_grid$lwr <- rug_pred$fit - 1.96 * rug_pred$se.fit
+rug_grid$upr <- rug_pred$fit + 1.96 * rug_pred$se.fit
+
+# ── Shared y-axis limits ──────────────────────────────────────
+y_min <- min(c(sg_grid$lwr, rug_grid$lwr,
+               total_model_data$log_mean_biomass), na.rm = TRUE)
+y_max <- max(c(sg_grid$upr, rug_grid$upr,
+               total_model_data$log_mean_biomass), na.rm = TRUE)
+y_pad <- (y_max - y_min) * 0.05
+y_lim <- c(y_min - y_pad, y_max + y_pad)
+
+# ── Shared theme ──────────────────────────────────────────────
+theme_fig1 <- theme_bw(base_size = 12) +
+  theme(axis.title.x     = element_text(face = "bold"),
+        axis.title.y     = element_blank(),  # y label handled externally
+        panel.grid.minor = element_blank(),
+        plot.tag         = element_text(face = "bold", size = 13),
+        plot.margin      = margin(5, 10, 5, 2))
+
+# ── Panel (a): Settlement gravity ─────────────────────────────
+p1a <- ggplot(sg_grid, aes(x = log_settlement_grav_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = col_pressure, alpha = 0.15) +
+  geom_line(colour = col_pressure, linewidth = 1.1) +
+  geom_point(data = total_model_data,
+             aes(x = log_settlement_grav_sc, y = log_mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  coord_cartesian(ylim = y_lim) +
+  labs(x   = "Fishing pressure\n(settlement gravity, standardised)",
+       tag = "(a)") +
+  theme_fig1
+
+# ── Panel (b): Rugosity ───────────────────────────────────────
+p1b <- ggplot(rug_grid, aes(x = rugosity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = col_rugosity, alpha = 0.15) +
+  geom_line(colour = col_rugosity, linewidth = 1.1) +
+  geom_point(data = total_model_data,
+             aes(x = rugosity_sc, y = log_mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  coord_cartesian(ylim = y_lim) +
+  labs(x   = "Habitat complexity\n(rugosity, standardised)",
+       tag = "(b)") +
+  theme_fig1
+
+# ── Shared y-axis label as textGrob ──────────────────────────
+# Placed to the left of both panels as a separate grob
+# angle = 0 — horizontal text
+# Does not affect panel widths
+
+y_label <- textGrob(
+  label = "Total reef\nfish biomass\n(log g)",
+  rot   = 0,          # horizontal
+  vjust = 0.5,
+  hjust = 0.5,
+  gp    = gpar(fontsize = 11, fontface = "bold")
+)
+
+# ── Figure title as textGrob ──────────────────────────────────
+fig_title <- textGrob(
+  label = "Figure 1. Marginal effects of fishing pressure and habitat complexity on total reef fish biomass",
+  x     = 0,
+  hjust = 0,
+  gp    = gpar(fontsize = 10, fontface = "plain")
+)
+
+# ── Arrange ───────────────────────────────────────────────────
+# Layout: title spans full width
+#         y label | panel a | panel b
+# widths: narrow y label, equal panels
+
+grid.arrange(
+  fig_title,
+  arrangeGrob(
+    y_label, p1a, p1b,
+    ncol   = 3,
+    widths = c(0.08, 0.46, 0.46)  # narrow label, equal panels
+  ),
+  nrow    = 2,
+  heights = c(0.06, 0.94)         # small title row, main figure
+)
+
+# ── Save ──────────────────────────────────────────────────────
+# jpeg("figure1_total_biomass.jpg",
+#      width = 22, height = 11, units = "cm", res = 300)
+# grid.arrange(
+#   fig_title,
+#   arrangeGrob(
+#     y_label, p1a, p1b,
+#     ncol   = 3,
+#     widths = c(0.08, 0.46, 0.46)
+#   ),
+#   nrow    = 2,
+#   heights = c(0.06, 0.94)
+# )
+# dev.off()

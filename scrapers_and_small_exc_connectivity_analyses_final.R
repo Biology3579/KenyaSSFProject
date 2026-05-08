@@ -1000,3 +1000,87 @@ tribble(
 # ============================================================
 cat("\n--- Session info ---\n")
 sessionInfo()
+
+# ============================================================
+#  FIGURE 2 — Scraper marginal effects
+#  (a) Settlement gravity (negative) — red #d73027
+#  (b) Chlorophyll-a (positive) — green #1a9641
+#  Predictions on response scale (Tweedie glmmTMB)
+#  Built separately then arranged
+# ============================================================
+
+# ── Panel (a): Settlement gravity ────────────────────────────
+grav_grid_scr <- data.frame(
+  log_settlement_grav_sc = seq(
+    min(scraper_model_data$log_settlement_grav_sc),
+    max(scraper_model_data$log_settlement_grav_sc),
+    length.out = 200),
+  rugosity_sc = 0,
+  log_chla_sc = 0
+)
+
+grav_pred_scr     <- predict(s_best_q3,
+                             newdata = grav_grid_scr,
+                             se.fit  = TRUE,
+                             type    = "response",
+                             re.form = NA)
+grav_grid_scr$fit <- grav_pred_scr$fit
+grav_grid_scr$lwr <- grav_pred_scr$fit - 1.96 * grav_pred_scr$se.fit
+grav_grid_scr$upr <- grav_pred_scr$fit + 1.96 * grav_pred_scr$se.fit
+
+p2a <- ggplot(grav_grid_scr,
+              aes(x = log_settlement_grav_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#d73027", alpha = 0.15) +
+  geom_line(colour = "#d73027", linewidth = 1.1) +
+  geom_point(data = scraper_model_data,
+             aes(x = log_settlement_grav_sc, y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x = "Settlement gravity (standardised)",
+       y = "Scraper biomass (g)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        panel.grid.minor = element_blank())
+
+# ── Panel (b): Chlorophyll-a ──────────────────────────────────
+chla_grid_scr <- data.frame(
+  log_chla_sc            = seq(
+    min(scraper_model_data$log_chla_sc),
+    max(scraper_model_data$log_chla_sc),
+    length.out = 200),
+  rugosity_sc            = 0,
+  log_settlement_grav_sc = 0
+)
+
+chla_pred_scr     <- predict(s_best_q3,
+                             newdata = chla_grid_scr,
+                             se.fit  = TRUE,
+                             type    = "response",
+                             re.form = NA)
+chla_grid_scr$fit <- chla_pred_scr$fit
+chla_grid_scr$lwr <- chla_pred_scr$fit - 1.96 * chla_pred_scr$se.fit
+chla_grid_scr$upr <- chla_pred_scr$fit + 1.96 * chla_pred_scr$se.fit
+
+p2b <- ggplot(chla_grid_scr,
+              aes(x = log_chla_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#1a9641", alpha = 0.15) +
+  geom_line(colour = "#1a9641", linewidth = 1.1) +
+  geom_point(data = scraper_model_data,
+             aes(x = log_chla_sc, y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x = "Chlorophyll-a (standardised)",
+       y = "Scraper biomass (g)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        panel.grid.minor = element_blank())
+
+# ── Arrange ───────────────────────────────────────────────────
+gridExtra::grid.arrange(p2a, p2b, ncol = 2)
+
+# jpeg("figure2_scrapers.jpg",
+#      width = 22, height = 11, units = "cm", res = 300)
+# gridExtra::grid.arrange(p2a, p2b, ncol = 2)
+# dev.off()

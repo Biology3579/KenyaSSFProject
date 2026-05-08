@@ -868,3 +868,90 @@ tribble(
 # ============================================================
 cat("\n--- Session info ---\n")
 sessionInfo()
+
+
+# ============================================================
+#  FIGURE 3 — Opposing connectivity effects
+#  (a) Browsers: positive connectivity — purple #7b2d8b
+#  (b) Corallivores: negative connectivity — orange #f46d43
+#  Predictions on response scale (Tweedie glmmTMB)
+#  Built separately then arranged
+# ============================================================
+
+# ── Panel (a): Browser connectivity ──────────────────────────
+conn_grid_b <- data.frame(
+  connectivity_sc = seq(
+    min(browser_model_data$connectivity_sc),
+    max(browser_model_data$connectivity_sc),
+    length.out = 200),
+  rugosity_sc = 0,
+  log_chla_sc = 0,
+  mpa_status  = factor("none",
+                       levels = c("none", "low", "medium"))
+)
+
+conn_pred_b      <- predict(b_best_q3,
+                            newdata = conn_grid_b,
+                            se.fit  = TRUE,
+                            type    = "response",
+                            re.form = NA)
+conn_grid_b$fit  <- conn_pred_b$fit
+conn_grid_b$lwr  <- conn_pred_b$fit - 1.96 * conn_pred_b$se.fit
+conn_grid_b$upr  <- conn_pred_b$fit + 1.96 * conn_pred_b$se.fit
+
+p3a <- ggplot(conn_grid_b,
+              aes(x = connectivity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#7b2d8b", alpha = 0.15) +
+  geom_line(colour = "#7b2d8b", linewidth = 1.1) +
+  geom_point(data = browser_model_data,
+             aes(x = connectivity_sc, y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x = "Connectivity (standardised)",
+       y = "Browser biomass (g)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        panel.grid.minor = element_blank())
+
+# ── Panel (b): Corallivore connectivity ──────────────────────
+conn_grid_c <- data.frame(
+  connectivity_sc = seq(
+    min(coralliv_model_data$connectivity_sc),
+    max(coralliv_model_data$connectivity_sc),
+    length.out = 200),
+  rugosity_sc = 0,
+  log_chla_sc = 0
+)
+
+conn_pred_c      <- predict(c_best_q3,
+                            newdata = conn_grid_c,
+                            se.fit  = TRUE,
+                            type    = "response",
+                            re.form = NA)
+conn_grid_c$fit  <- conn_pred_c$fit
+conn_grid_c$lwr  <- conn_pred_c$fit - 1.96 * conn_pred_c$se.fit
+conn_grid_c$upr  <- conn_pred_c$fit + 1.96 * conn_pred_c$se.fit
+
+p3b <- ggplot(conn_grid_c,
+              aes(x = connectivity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#f46d43", alpha = 0.15) +
+  geom_line(colour = "#f46d43", linewidth = 1.1) +
+  geom_point(data = coralliv_model_data,
+             aes(x = connectivity_sc, y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x = "Connectivity (standardised)",
+       y = "Corallivore biomass (g)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        panel.grid.minor = element_blank())
+
+# ── Arrange ───────────────────────────────────────────────────
+gridExtra::grid.arrange(p3a, p3b, ncol = 2)
+
+# jpeg("figure3_connectivity.jpg",
+#      width = 22, height = 11, units = "cm", res = 300)
+# gridExtra::grid.arrange(p3a, p3b, ncol = 2)
+# dev.off()

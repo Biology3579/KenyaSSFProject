@@ -1112,3 +1112,276 @@ tribble(
 # ============================================================
 cat("\n--- Session info ---\n")
 sessionInfo()
+
+
+# ============================================================
+#  FIGURE 4 — Piscivore connectivity × market gravity
+#  interaction
+#  Three lines: low/medium/high connectivity percentiles
+#  Colour scheme: red → orange → blue (low → high conn)
+#  No CI ribbons — three lines only for clarity
+#  Rug marks on x-axis for observed distribution
+# ============================================================
+
+conn_quantiles_p <- quantile(pisc_model_data$connectivity_sc,
+                             c(0.10, 0.50, 0.90))
+
+pred_grid_p <- expand.grid(
+  log_market_gravity_sc = seq(
+    min(pisc_model_data$log_market_gravity_sc),
+    max(pisc_model_data$log_market_gravity_sc),
+    length.out = 200),
+  connectivity_sc = conn_quantiles_p,
+  rugosity_sc     = 0,
+  log_chla_sc     = 0,
+  mpa_status      = factor("none",
+                           levels = c("none", "low", "medium"))
+)
+
+pred_grid_p$fit <- predict(p_best_q3,
+                           newdata = pred_grid_p,
+                           type    = "response",
+                           re.form = NA)
+
+pred_grid_p$conn_label <- factor(
+  round(pred_grid_p$connectivity_sc, 2),
+  labels = c("Low connectivity (10th percentile)",
+             "Medium connectivity (50th percentile)",
+             "High connectivity (90th percentile)"))
+
+p4 <- ggplot(pred_grid_p,
+             aes(x      = log_market_gravity_sc,
+                 y      = fit,
+                 colour = conn_label,
+                 group  = conn_label)) +
+  geom_line(linewidth = 1.1) +
+  geom_rug(data        = pisc_model_data,
+           aes(x       = log_market_gravity_sc),
+           inherit.aes = FALSE,
+           alpha       = 0.4,
+           sides       = "b") +
+  scale_colour_manual(
+    values = c(
+      "Low connectivity (10th percentile)"    = "#d7191c",
+      "Medium connectivity (50th percentile)" = "#fdae61",
+      "High connectivity (90th percentile)"   = "#2c7bb6")
+  ) +
+  labs(x      = "Market gravity (standardised)",
+       y      = "Piscivore biomass (g)",
+       colour = NULL) +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        legend.position  = "top",
+        panel.grid.minor = element_blank())
+
+print(p4)
+
+# jpeg("figure4_piscivore_interaction.jpg",
+#      width = 14, height = 12, units = "cm", res = 300)
+# print(p4)
+# dev.off()
+
+
+# ============================================================
+#  FIGURE 4 — Piscivore connectivity × market gravity
+#  Two panels showing market gravity effect at low vs
+#  high connectivity
+#  (a) Low connectivity (10th percentile)
+#  (b) High connectivity (90th percentile)
+# ============================================================
+
+conn_low  <- quantile(pisc_model_data$connectivity_sc, 0.10)
+conn_high <- quantile(pisc_model_data$connectivity_sc, 0.90)
+
+mkt_seq <- seq(
+  min(pisc_model_data$log_market_gravity_sc),
+  max(pisc_model_data$log_market_gravity_sc),
+  length.out = 200)
+
+# ── Low connectivity grid ─────────────────────────────────────
+grid_low <- data.frame(
+  log_market_gravity_sc = mkt_seq,
+  connectivity_sc       = conn_low,
+  rugosity_sc           = 0,
+  log_chla_sc           = 0,
+  mpa_status            = factor("none",
+                                 levels = c("none", "low",
+                                            "medium"))
+)
+
+pred_low        <- predict(p_best_q3,
+                           newdata = grid_low,
+                           se.fit  = TRUE,
+                           type    = "response",
+                           re.form = NA)
+grid_low$fit    <- pred_low$fit
+grid_low$lwr    <- pred_low$fit - 1.96 * pred_low$se.fit
+grid_low$upr    <- pred_low$fit + 1.96 * pred_low$se.fit
+
+# ── High connectivity grid ────────────────────────────────────
+grid_high <- data.frame(
+  log_market_gravity_sc = mkt_seq,
+  connectivity_sc       = conn_high,
+  rugosity_sc           = 0,
+  log_chla_sc           = 0,
+  mpa_status            = factor("none",
+                                 levels = c("none", "low",
+                                            "medium"))
+)
+
+pred_high       <- predict(p_best_q3,
+                           newdata = grid_high,
+                           se.fit  = TRUE,
+                           type    = "response",
+                           re.form = NA)
+grid_high$fit   <- pred_high$fit
+grid_high$lwr   <- pred_high$fit - 1.96 * pred_high$se.fit
+grid_high$upr   <- pred_high$fit + 1.96 * pred_high$se.fit
+
+# ── Panel (a): Low connectivity ───────────────────────────────
+p4a <- ggplot(grid_low,
+              aes(x = log_market_gravity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#d7191c", alpha = 0.15) +
+  geom_line(colour = "#d7191c", linewidth = 1.1) +
+  geom_point(data = pisc_model_data,
+             aes(x = log_market_gravity_sc,
+                 y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x     = "Market gravity (standardised)",
+       y     = "Piscivore biomass (g)",
+       title = "Low connectivity (10th percentile)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        plot.title       = element_text(size = 11),
+        panel.grid.minor = element_blank())
+
+# ── Panel (b): High connectivity ──────────────────────────────
+p4b <- ggplot(grid_high,
+              aes(x = log_market_gravity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#2c7bb6", alpha = 0.15) +
+  geom_line(colour = "#2c7bb6", linewidth = 1.1) +
+  geom_point(data = pisc_model_data,
+             aes(x = log_market_gravity_sc,
+                 y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x     = "Market gravity (standardised)",
+       y     = "Piscivore biomass (g)",
+       title = "High connectivity (90th percentile)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        plot.title       = element_text(size = 11),
+        panel.grid.minor = element_blank())
+
+# ── Arrange ───────────────────────────────────────────────────
+gridExtra::grid.arrange(p4a, p4b, ncol = 2)
+
+# jpeg("figure4_piscivore_interaction.jpg",
+#      width = 22, height = 11, units = "cm", res = 300)
+# gridExtra::grid.arrange(p4a, p4b, ncol = 2)
+# dev.off()
+
+# ============================================================
+#  FIGURE 4 — Piscivore connectivity × market gravity
+#  Two panels splitting sites by market gravity
+#  (a) Low market gravity sites (below median)
+#  (b) High market gravity sites (above median)
+#  Shows how connectivity effect reverses with market access
+# ============================================================
+
+mkt_median <- median(pisc_model_data$log_market_gravity_sc)
+
+# ── Split observed data ───────────────────────────────────────
+pisc_low_mkt  <- pisc_model_data %>%
+  filter(log_market_gravity_sc <= mkt_median)
+
+pisc_high_mkt <- pisc_model_data %>%
+  filter(log_market_gravity_sc > mkt_median)
+
+# ── Prediction grids ─────────────────────────────────────────
+conn_seq <- seq(
+  min(pisc_model_data$connectivity_sc),
+  max(pisc_model_data$connectivity_sc),
+  length.out = 200)
+
+grid_low_mkt <- data.frame(
+  connectivity_sc       = conn_seq,
+  log_market_gravity_sc = mkt_median - sd(pisc_model_data$log_market_gravity_sc),
+  rugosity_sc           = 0,
+  log_chla_sc           = 0,
+  mpa_status            = factor("none",
+                                 levels = c("none", "low", "medium"))
+)
+
+grid_high_mkt <- data.frame(
+  connectivity_sc       = conn_seq,
+  log_market_gravity_sc = mkt_median + sd(pisc_model_data$log_market_gravity_sc),
+  rugosity_sc           = 0,
+  log_chla_sc           = 0,
+  mpa_status            = factor("none",
+                                 levels = c("none", "low", "medium"))
+)
+
+pred_low_mkt  <- predict(p_best_q3, newdata = grid_low_mkt,
+                         se.fit = TRUE, type = "response",
+                         re.form = NA)
+pred_high_mkt <- predict(p_best_q3, newdata = grid_high_mkt,
+                         se.fit = TRUE, type = "response",
+                         re.form = NA)
+
+grid_low_mkt$fit  <- pred_low_mkt$fit
+grid_low_mkt$lwr  <- pred_low_mkt$fit  - 1.96 * pred_low_mkt$se.fit
+grid_low_mkt$upr  <- pred_low_mkt$fit  + 1.96 * pred_low_mkt$se.fit
+
+grid_high_mkt$fit <- pred_high_mkt$fit
+grid_high_mkt$lwr <- pred_high_mkt$fit - 1.96 * pred_high_mkt$se.fit
+grid_high_mkt$upr <- pred_high_mkt$fit + 1.96 * pred_high_mkt$se.fit
+
+# ── Panel (a): Low market gravity ────────────────────────────
+p4a <- ggplot(grid_low_mkt,
+              aes(x = connectivity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#2c7bb6", alpha = 0.15) +
+  geom_line(colour = "#2c7bb6", linewidth = 1.1) +
+  geom_point(data = pisc_low_mkt,
+             aes(x = connectivity_sc, y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x     = "Connectivity (standardised)",
+       y     = "Piscivore biomass (g)",
+       title = "Low market gravity") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        plot.title       = element_text(size = 11,
+                                        face = "bold"),
+        panel.grid.minor = element_blank())
+
+# ── Panel (b): High market gravity ───────────────────────────
+p4b <- ggplot(grid_high_mkt,
+              aes(x = connectivity_sc, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr),
+              fill = "#d7191c", alpha = 0.15) +
+  geom_line(colour = "#d7191c", linewidth = 1.1) +
+  geom_point(data = pisc_high_mkt,
+             aes(x = connectivity_sc, y = mean_biomass),
+             colour = "grey40", size = 1.5, alpha = 0.5,
+             inherit.aes = FALSE) +
+  labs(x     = "Connectivity (standardised)",
+       y     = "Piscivore biomass (g)",
+       title = "High market gravity") +
+  theme_bw(base_size = 12) +
+  theme(axis.title       = element_text(face = "bold"),
+        plot.title       = element_text(size = 11,
+                                        face = "bold"),
+        panel.grid.minor = element_blank())
+
+# ── Arrange ───────────────────────────────────────────────────
+gridExtra::grid.arrange(p4a, p4b, ncol = 2)
+
+# jpeg("figure4_piscivore_interaction.jpg",
+#      width = 22, height = 11, units = "cm", res = 300)
+# gridExtra::grid.arrange(p4a, p4b, ncol = 2)
+# dev.off()

@@ -382,6 +382,7 @@ print(make_aicc_df(list(
 b_best_q1 <- b_baseline
 
 
+# need to move this to ....
 cat("\n--- Baseline coefficients ---\n")
 summary(b_baseline)
 
@@ -409,21 +410,6 @@ cat(sprintf(
   "Fold difference in biomass (low → high rugosity): %.2fx higher\n",
   fold_rug_b
 ))
-
-
-# Also check settlement gravity and market gravity (as they are within 2 delta AICc)
-cat("\n--- Q1: Pressure metric direction checks ---\n")
-cat("Settlement gravity:\n")
-print(summary(b_q1_settgrav))
-
-cat("\nMarket gravity:\n")
-print(summary(b_q1_mktgrav))
-
-
-# Direction check only
-cat("\nSettlement population:\n")
-print(summary(b_q1_settpop)$coefficients$cond[
-  "log_settlement_pop_sc", ])
 
 # Q1 Step 2 results — baseline and direction checks:
 #
@@ -620,7 +606,6 @@ print(confint(b_q3_mpa))
 #     medium MPA mean conn z = +0.303 vs none z = -0.345)
 
 
-
 # Results:
 #   Medium MPA: 95% CI [+0.409, +1.877] on log scale
 #   Back-transformed: [1.50x, 6.53x] fold difference
@@ -642,36 +627,6 @@ cat(sprintf(
 #   unprotected sites (95% CI: 1.50x to 6.53x),
 #   controlling for habitat complexity and connectivity.
 
-# ── Step 5: MPA placement check ──────────────────────────────
-# Critical — MPAs non-randomly placed. Confirms model-
-# controlled comparison is necessary and that raw
-# differences are not purely a pressure artefact.
-cat("\n--- Q3: Settlement gravity and connectivity by MPA status ---\n")
-browser_model_data %>%
-  group_by(mpa_status) %>%
-  summarise(
-    n                    = n(),
-    mean_settlement_grav = round(mean(log_settlement_grav_sc), 3),
-    mean_connectivity    = round(mean(connectivity_sc), 3),
-    .groups = "drop"
-  ) %>%
-  print()
-
-# Results:
-#   none:   n = 30, mean pressure z = +0.242,
-#           mean connectivity z = -0.345
-#   low:    n = 7,  mean pressure z = +0.473,
-#           mean connectivity z = +0.879
-#   medium: n = 17, mean pressure z = -0.532,
-#           mean connectivity z = +0.303
-#
-#   Medium MPA sites at substantially lower pressure
-#   than unprotected sites — raw biomass differences
-#   partially reflect pressure context, not just
-#   protection. Model controls for this.
-#   Low MPA sites at highest pressure AND highest
-#   connectivity — the null result for low MPA is
-#   not a connectivity artefact.
 
 # ── Step 6: Raw biomass by MPA status ────────────────────────
 # Sanity check — model fold difference (3.13x) should
@@ -701,52 +656,6 @@ browser_model_data %>%
 #   context pulls raw means down; once controlled, no
 #   effect detected.
 
-# ── Step 7: MPA x connectivity interaction ───────────────────
-# Tested because MPA supported (DAICc > 2) and
-# mechanistically coherent for browsers.
-# Hypothesis: protected sites benefit more where
-# connectivity is high (larval subsidy into recovering
-# populations).
-
-b_q3_mpa_conn_int <- glmmTMB(
-  mean_biomass ~ rugosity_sc +
-    log_chla_sc +
-    mpa_status * connectivity_sc,
-  family = tweedie(link = "log"),
-  data   = browser_model_data
-)
-
-cat("\n--- Q3: MPA x connectivity interaction model comparison ---\n")
-print(make_aicc_df(list(
-  "Best Q2"                      = b_best_q2,
-  "Best Q2 + MPA"                = b_q3_mpa,
-  "Best Q2 + MPA x connectivity" = b_q3_mpa_conn_int
-)))
-
-cat("\n--- Q3: MPA x connectivity interaction coefficients ---\n")
-summary(b_q3_mpa_conn_int)
-
-# Results:
-#   Best Q2 + MPA:                AICc = 826.43, weight = 0.662
-#   Best Q2 + MPA x connectivity: DAICc = 1.62,  weight = 0.295
-#   Interaction competitive but not decisive (DAICc = 1.62).
-#
-#   Medium MPA x connectivity: b = +0.729, p = 0.035 *
-#     Suggestive positive interaction — protected sites
-#     benefit more where connectivity is high. Consistent
-#     with larval subsidy supporting recovery.
-#   Medium MPA main effect: b = +1.125, p = 0.002 **
-#     Stable — MPA signal not driven by connectivity.
-#   Low MPA x connectivity: b = +0.718, p = 0.831 ns
-#     Unreliable — SE = 3.36, narrow connectivity range
-#     of low MPA sites (z = +0.66 to +1.00, n = 7).
-#     Do not interpret.
-#   Connectivity main effect: b = -0.175, p = 0.492 ns
-#
-#   DECISION: Interaction suggestive but model selection
-#   uncertainty (DAICc = 1.62) means it cannot be
-#   reported as a primary result. MPA main effect model
-#   retained. Interaction noted in supplementary.
 
 # ── Best Q3 model ─────────────────────────────────────────────
 # MPA main effect model — interaction suggestive only.
@@ -831,43 +740,119 @@ print(moran.test(residuals(b_q3_mpa,
 #  SENSITIVITY ANALYSIS
 # ============================================================
 
-# ── (a) Alternative pressure metrics ─────────────────────────
-# Confirms Q1 conclusions are not metric-dependent.
-# Particularly important given higher metric uncertainty
-# in browser Q1 relative to total biomass.
+# ── Settlement gravity ────────────────────────────────────────
+cat("\n--- Sensitivity (a): settlement gravity ---\n")
 
-b_sens_mktgrav <- glmmTMB(
-  mean_biomass ~ rugosity_sc +
-    log_chla_sc +
-    log_market_gravity_sc,
+# Q2: connectivity beyond settlement gravity
+b_sens_sg_conn <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_settlement_grav_sc + connectivity_sc,
   family = tweedie(link = "log"),
-  data   = browser_model_data
+  data = browser_model_data
 )
 
-b_sens_settpop <- glmmTMB(
-  mean_biomass ~ rugosity_sc +
-    log_chla_sc +
-    log_settlement_pop_sc,
+# Q2: connectivity × settlement gravity interaction
+b_sens_sg_conn_int <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_settlement_grav_sc * connectivity_sc,
   family = tweedie(link = "log"),
-  data   = browser_model_data
+  data = browser_model_data
 )
 
-cat("\n--- Sensitivity (a): browser alternative metrics ---\n")
-cat("Market gravity:\n")
-print(summary(b_sens_mktgrav)$coefficients$cond)
-cat("\nSettlement population:\n")
-print(summary(b_sens_settpop)$coefficients$cond)
+cat("\nQ2 — model comparison:\n")
+print(make_aicc_df(list(
+  "Baseline + SG"             = b_q1_settgrav,
+  "Baseline + SG + conn"      = b_sens_sg_conn,
+  "Baseline + SG + conn x SG" = b_sens_sg_conn_int
+)))
 
-# Results:
-#   Market gravity:    b = +0.191, p = 0.347 ns
-#   Settlement pop.:   b = -0.055, p = 0.761 ns
-#   Inconsistent directions across metrics — market
-#   gravity positive, settlement population negative.
-#   All non-significant. Confirms Q1 null result is
-#   not metric-dependent but reflects genuine absence
-#   of a coherent pressure signal for browsers.
-#   Rugosity stable and significant across all metrics
-#   (b = 0.460–0.540, p < 0.05).
+# Check top model
+cat("\nQ2 — connectivity model summary:\n")
+print(summary(b_sens_sg_conn))
+print(confint(b_sens_sg_conn))
+
+
+# Q3: MPA beyond settlement gravity + connectivity
+b_sens_sg_mpa <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_settlement_grav_sc + connectivity_sc + mpa_status,
+  family = tweedie(link = "log"),
+  data = browser_model_data
+)
+
+cat("\nQ3 — model comparison:\n")
+print(make_aicc_df(list(
+  "Baseline + SG + conn"       = b_sens_sg_conn,
+  "Baseline + SG + conn + MPA" = b_sens_sg_mpa
+)))
+
+cat("\nQ3 — MPA model summary:\n")
+print(summary(b_sens_sg_mpa))
+print(confint(b_sens_sg_mpa))
+
+# # Sensitivity (a) key findings:
+# With settlement gravity included:
+#   Q2: connectivity remains significant (b = +0.473, p = 0.003)
+#   Q3: medium MPA remains significant (b = +1.134, p = 0.005)
+#   Settlement gravity not significant in either model
+# Conclusions robust to Q1 metric uncertainty
+
+# ── Market gravity ────────────────────────────────────────────
+cat("\n--- Sensitivity (a): market gravity ---\n")
+
+# Q2: connectivity beyond market gravity
+b_sens_mg_conn <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_market_gravity_sc + connectivity_sc,
+  family = tweedie(link = "log"),
+  data = browser_model_data
+)
+
+# Q2: connectivity × market gravity interaction
+b_sens_mg_conn_int <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_market_gravity_sc * connectivity_sc,
+  family = tweedie(link = "log"),
+  data = browser_model_data
+)
+
+cat("\nQ2 — model comparison:\n")
+print(make_aicc_df(list(
+  "Baseline + MG"              = b_q1_mktgrav,
+  "Baseline + MG + conn"       = b_sens_mg_conn,
+  "Baseline + MG + conn x MG"  = b_sens_mg_conn_int
+)))
+
+cat("\nQ2 — connectivity model summary:\n")
+print(summary(b_sens_mg_conn))
+print(confint(b_sens_mg_conn))
+
+# Q3: MPA beyond market gravity + connectivity
+b_sens_mg_mpa <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_market_gravity_sc + connectivity_sc + mpa_status,
+  family = tweedie(link = "log"),
+  data = browser_model_data
+)
+
+cat("\nQ3 — model comparison:\n")
+print(make_aicc_df(list(
+  "Baseline + MG + conn"       = b_sens_mg_conn,
+  "Baseline + MG + conn + MPA" = b_sens_mg_mpa
+)))
+
+cat("\nQ3 — MPA model summary:\n")
+print(summary(b_sens_mg_mpa))
+print(confint(b_sens_mg_mpa))
+
+# Sensitivity (a) summary — browsers:
+# With settlement gravity:
+#   Q2 connectivity: b = +0.473, p = 0.003 — robust
+#   Q3 medium MPA:   b = +1.134, p = 0.005 — robust
+# With market gravity:
+#   Q2 connectivity: b = +0.418, p = 0.014 — robust
+#   Q3 medium MPA:   b = +1.154, p = 0.002 — robust
+# Both key findings robust to Q1 metric uncertainty
 
 # ── (b) Transect-level replication ───────────────────────────
 # 43% zeros at transect level — Tweedie required.
@@ -1161,3 +1146,113 @@ tribble(
 cat("\n--- Session info ---\n")
 sessionInfo()
 
+# ============================================================
+#  FIGURE 5 — MPA marginal means
+#  (a) Browsers — purple #7b2d8b
+#  (b) Piscivores — red #d7191c
+#  Pointrange style with dashed reference line at no-MPA
+#  Free y-axis scales
+#  Observed data overlaid as jittered points
+# ============================================================
+
+# ── Panel (a): Browser MPA marginal means ────────────────────
+mpa_grid_b <- data.frame(
+  mpa_status      = factor(c("none", "low", "medium"),
+                           levels = c("none", "low", "medium")),
+  rugosity_sc     = 0,
+  log_chla_sc     = 0,
+  connectivity_sc = 0
+)
+
+mpa_pred_b     <- predict(b_best_q3,
+                          newdata = mpa_grid_b,
+                          se.fit  = TRUE,
+                          type    = "response",
+                          re.form = NA)
+mpa_grid_b$fit <- mpa_pred_b$fit
+mpa_grid_b$lwr <- mpa_pred_b$fit - 1.96 * mpa_pred_b$se.fit
+mpa_grid_b$upr <- mpa_pred_b$fit + 1.96 * mpa_pred_b$se.fit
+
+p5a <- ggplot(mpa_grid_b,
+              aes(x = mpa_status, y = fit)) +
+  geom_hline(yintercept = mpa_grid_b$fit[1],
+             linetype   = "dashed",
+             colour     = "grey70",
+             linewidth  = 0.4) +
+  geom_jitter(data   = browser_model_data,
+              aes(x  = mpa_status,
+                  y  = mean_biomass),
+              width  = 0.1,
+              size   = 1.5,
+              alpha  = 0.4,
+              colour = "grey50",
+              inherit.aes = FALSE) +
+  geom_pointrange(aes(ymin = lwr, ymax = upr),
+                  colour    = "#7b2d8b",
+                  linewidth = 0.7,
+                  size      = 0.6) +
+  scale_x_discrete(labels = c("none"   = "No MPA",
+                              "low"    = "Low",
+                              "medium" = "Medium")) +
+  labs(x = "MPA status",
+       y = "Browser biomass (g)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title         = element_text(face = "bold"),
+        panel.grid.minor   = element_blank(),
+        panel.grid.major.x = element_blank())
+
+# ── Panel (b): Piscivore MPA marginal means ──────────────────
+mpa_grid_p <- data.frame(
+  mpa_status            = factor(c("none", "low", "medium"),
+                                 levels = c("none", "low",
+                                            "medium")),
+  rugosity_sc           = 0,
+  log_chla_sc           = 0,
+  log_market_gravity_sc = 0,
+  connectivity_sc       = 0
+)
+
+mpa_pred_p     <- predict(p_best_q3,
+                          newdata = mpa_grid_p,
+                          se.fit  = TRUE,
+                          type    = "response",
+                          re.form = NA)
+mpa_grid_p$fit <- mpa_pred_p$fit
+mpa_grid_p$lwr <- mpa_pred_p$fit - 1.96 * mpa_pred_p$se.fit
+mpa_grid_p$upr <- mpa_pred_p$fit + 1.96 * mpa_pred_p$se.fit
+
+p5b <- ggplot(mpa_grid_p,
+              aes(x = mpa_status, y = fit)) +
+  geom_hline(yintercept = mpa_grid_p$fit[1],
+             linetype   = "dashed",
+             colour     = "grey70",
+             linewidth  = 0.4) +
+  geom_jitter(data   = pisc_model_data,
+              aes(x  = mpa_status,
+                  y  = mean_biomass),
+              width  = 0.1,
+              size   = 1.5,
+              alpha  = 0.4,
+              colour = "grey50",
+              inherit.aes = FALSE) +
+  geom_pointrange(aes(ymin = lwr, ymax = upr),
+                  colour    = "#d7191c",
+                  linewidth = 0.7,
+                  size      = 0.6) +
+  scale_x_discrete(labels = c("none"   = "No MPA",
+                              "low"    = "Low",
+                              "medium" = "Medium")) +
+  labs(x = "MPA status",
+       y = "Piscivore biomass (g)") +
+  theme_bw(base_size = 12) +
+  theme(axis.title         = element_text(face = "bold"),
+        panel.grid.minor   = element_blank(),
+        panel.grid.major.x = element_blank())
+
+# ── Arrange ───────────────────────────────────────────────────
+gridExtra::grid.arrange(p5a, p5b, ncol = 2)
+
+# jpeg("figure5_mpa_marginal_means.jpg",
+#      width = 22, height = 11, units = "cm", res = 300)
+# gridExtra::grid.arrange(p5a, p5b, ncol = 2)
+# dev.off()

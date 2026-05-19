@@ -678,6 +678,16 @@ sens_t_conn <- lmer(log_transect_biomass ~ rugosity_sc +
                       connectivity_sc + (1 | site),
                     data = transect_model_data, REML = TRUE)
 
+sens_t_conn_int <- lmer(log_transect_biomass ~ rugosity_sc +
+                          log_chla_sc +
+                          log_settlement_grav_sc +
+                          connectivity_sc +
+                          log_settlement_grav_sc:connectivity_sc + 
+                          (1 | site),
+                        data = transect_model_data, REML = TRUE)
+
+sens_t_conn_int_ml <- update(sens_t_conn_int, REML = FALSE)
+
 sens_t_mpa <- lmer(log_transect_biomass ~ rugosity_sc +
                      log_chla_sc +
                      log_settlement_grav_sc +
@@ -710,6 +720,7 @@ print(make_aicc_df(list(
   "Baseline"            = sens_t_baseline_ml,
   "Baseline + pressure" = sens_t_pressure_ml,
   "Best + conn"         = sens_t_conn_ml,
+  "Best + conn + int"   = sens_t_conn_int_ml,
   "Best + MPA"          = sens_t_mpa_ml
 )))
 
@@ -738,6 +749,11 @@ print(confint(sens_t_pressure))
 #     Reaches significance at transect level (n = 243)
 #     but not site level (n = 54) — power difference only,
 #     direction consistent.
+
+# ── Coefficient summary — REML pressure model ────────────────
+summary(sens_t_conn_int)
+confint(sens_t_conn_int)
+
 
 # ── ICC ───────────────────────────────────────────────────────
 vc           <- as.data.frame(VarCorr(sens_t_pressure))

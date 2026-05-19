@@ -156,29 +156,32 @@ plot(scr_tw_res)
 testZeroInflation(scr_tw_res)
 testDispersion(scr_tw_res)
 
-# Family selection:
-#   Gaussian log: REJECTED
-#     Site 12 (itsan, Comoros) — standardised residual
-#     = -4.5, exceeds Cook's distance threshold. Severe
-#     lower tail Q-Q deviation. Scale-location shows
-#     elevated sqrt(standardised residual) at low fitted
-#     values. No offset constant resolves this — itsan
-#     is a genuine biological observation (extreme low
-#     biomass, ~130x below median) that Gaussian log
-#     cannot accommodate without coefficient distortion.
-#
-#   Tweedie (log link): SELECTED
-#     Handles extreme low values natively.
-#     DHARMa diagnostics (n = 1000):
-#       KS test:        p = 0.589 — good fit
-#       Dispersion:     p = 0.240, ratio = 1.359 — acceptable
-#       Zero inflation: p = 1.000 — not needed
-#       Outlier test:   p = 1.000 — no outliers
-#     Minor lower quantile deviation in residuals vs
-#     predicted — formal tests all non-significant.
-#
-#   Proceed: glmmTMB(family = tweedie(link = "log")) on
-#   raw mean_biomass throughout all scraper analyses.
+# Family selection — Gaussian log baseline diagnostics:
+#   Residuals vs Fitted: site 12 (itsan) pulls residual
+#     to -4.5 at low fitted values — severe lower tail
+#     deviation. Site 11 also flagged.
+#   Q-Q: site 12 falls far below theoretical line at
+#     lower tail (standardised residual ~ -4.5). Site 11
+#     elevated at upper tail.
+#   Scale-Location: site 12 elevated at low fitted values;
+#     broadly flat otherwise.
+#   Residuals vs Leverage: site 12 leverage ~0.18,
+#     standardised residual ~ -4.5 — exceeds Cook's
+#     distance = 1 threshold. Confirmed highly influential.
+#   Gaussian log REJECTED on basis of site 12.
+
+# Family selection — Tweedie DHARMa (baseline):
+#   KS test:        p = 0.589 — good fit
+#   Dispersion:     p = 0.240, ratio = 1.359 — acceptable
+#   Zero inflation: p = 1.000 — not needed
+#   Outlier test:   p = 1.000 — no outliers
+#   Residuals vs predicted: quantile deviations detected
+#     (red curve, lower quantile near zero across fitted
+#     range). Combined adjusted quantile test significant
+#     — driven by itsan's extreme low biomass compressing
+#     the lower quantile. KS and dispersion pass —
+#     Tweedie substantially better than Gaussian log.
+#     Proceed with Tweedie.
 
 
 # ============================================================
@@ -254,17 +257,18 @@ print(make_aicc_df(list(
   "Baseline + settlement pop."    = s_q1_settpop
 )))
 
-# Results:
+# Q1 results:
 #   Settlement gravity: AICc = 1007.32, weight = 0.562 (BEST)
-#   Market gravity:     DAICc = [update],  weight = [update]
-#   Baseline:           DAICc = 2.85,  weight = [update]
-#   Settlement pop.:    DAICc = [update],  weight = [update]
+#   Market gravity:     DAICc = 1.62,   weight = 0.251
+#   Baseline:           DAICc = 2.85,   weight = 0.135
+#   Settlement pop.:    DAICc = 4.76,   weight = 0.052
 #
 #   Settlement gravity best supported — ecologically
 #   motivated as scrapers are subsistence-targeted.
-#   Market gravity within DAICc < 2 threshold —
-#   evaluated in sensitivity (a).
-#   [Update all values after running]
+#   Market gravity within DAICc < 2 threshold (DAICc = 1.62)
+#   — evaluated in sensitivity (a).
+#   Settlement pop. and baseline outside threshold —
+#   not evaluated.
 
 # ── Best Q1 model ─────────────────────────────────────────────
 # Settlement gravity best supported — carried forward.
@@ -314,16 +318,30 @@ s_best_q1_sim <- simulateResiduals(s_best_q1, n = 1000)
 plot(s_best_q1_sim)
 testOutliers(s_best_q1_sim)
 
-# Results:
-#   Settlement gravity: b = -0.261, z = [update], p = 0.017 *
-#     95% CI: [update]
-#     Fold difference: [update]x across observed range
-#     (span = [update] SD units)
-#     95% CI on fold difference: [update]x to [update]x
-#   Chla: b = +0.204, p = 0.037 *
-#     Fold difference: [update]x
-#   Rugosity: b = +0.143, p = 0.126 ns
-#   DHARMa: [update from plots]
+# Best model results:
+#   Settlement gravity: b = -0.261, z = -2.39, p = 0.017 *
+#     95% CI [-0.475, -0.047]
+#     Fold difference: 2.84x across observed range
+#     (span = 4.001 SD units)
+#     95% CI on fold difference: 6.70x to 1.21x
+#   Chla: b = +0.204, z = 2.09, p = 0.037 *
+#     95% CI [0.013, 0.396]
+#     Fold difference: 2.17x across observed range
+#     (span = 3.784 SD units)
+#   Rugosity: b = +0.143, z = 1.53, p = 0.126 ns
+#     Fold difference: 2.09x — positive but not significant
+#   Dispersion = 2.88 — moderate; lower than piscivores
+#     and excavators.
+#   DHARMa diagnostics — best Q1 model (settlement gravity):
+#   KS test:        p = 0.439 — no significant deviation
+#   Dispersion:     p = 0.182 — no significant deviation
+#   Outlier test:   p = 1.000 — no outliers
+#   Residuals vs predicted: quantile deviations detected
+#     (red curve, lower quantile below expected, combined
+#     adjusted quantile test significant). Consistent
+#     pattern with Tweedie baseline — itsan drives lower
+#     quantile compression. KS and dispersion pass —
+#     acceptable overall.
 
 
 # ============================================================
@@ -351,6 +369,24 @@ print(make_aicc_df(list(
   "Best Q1"                = s_best_q1,
   "Best Q1 + connectivity" = s_q2_conn
 )))
+
+s_q2_conn_int <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_settlement_grav_sc +
+    connectivity_sc +
+    log_settlement_grav_sc:connectivity_sc,
+  family = tweedie(link = "log"),
+  data   = scraper_model_data)
+
+cat("\n--- Q2: Connectivity interaction ---\n")
+print(make_aicc_df(list(
+  "Best Q1"                      = s_best_q1,
+  "Best Q1 + connectivity"       = s_q2_conn,
+  "Best Q1 + connectivity + int" = s_q2_conn_int
+)))
+
+summary(s_q2_conn_int)
+confint(s_q2_conn_int)
 
 # ── Best Q2 model ─────────────────────────────────────────────
 # Connectivity not supported — best Q1 retained.
@@ -433,27 +469,30 @@ s_q3_sim <- simulateResiduals(s_q3_mpa, n = 1000)
 plot(s_q3_sim)
 testOutliers(s_q3_sim)
 
-# Results:
-#   Best Q2:               AICc = 1007.32, weight = [update]
-#   Best Q2 + MPA:         DAICc =  0.89,  weight = [update]
-#   Best Q2 + MPA x press: DAICc =  5.58,  weight = [update]
-#   MPA not clearly supported — genuine uncertainty
-#   (DAICc < 2) but best Q2 preferred.
+# Q3 results:
+#   Best Q2:               AICc = 1007.32, weight = 0.588
+#   Best Q2 + MPA:         DAICc =  0.89,  weight = 0.376
+#   Best Q2 + MPA x press: DAICc =  5.58,  weight = 0.036
+#   MPA not clearly supported — best Q2 preferred but
+#   genuine uncertainty (DAICc < 2).
 #   MPA × pressure interaction not supported (DAICc = 5.58).
 #
-#   Medium MPA: b = -0.422, p = 0.034 * — significant but
-#     NEGATIVE and artefactual. Raw means confirm:
-#     none = 5267g, low = 4192g, medium = 3975g —
-#     unprotected sites have highest mean biomass.
-#     MPA placement bias: medium MPA sites at moderately
-#     high connectivity (mean z = +0.303), likely in
-#     lower-productivity or higher-pressure areas.
+#   Medium MPA: b = -0.422, z = -2.12, p = 0.034 *
+#     95% CI [-0.813, -0.032] — significant but NEGATIVE
+#     and artefactual. Raw means: none = 5267g, medium = 3975g.
 #   Low MPA: b = +0.034, p = 0.897 ns
-#   Settlement gravity: b = -0.363, p = 0.002 ** —
-#     strengthens when MPA included.
-#
-#   Conclusion: MPA not supported. Best Q2 model retained.
-#   DHARMa: [update from plots]
+#   Settlement gravity: b = -0.363, p = 0.002 ** — strengthens
+#   Chla: b = +0.147, p = 0.127 ns — weakens slightly
+#   DHARMa diagnostics — Q3 model (settlement gravity + MPA):
+#   KS test:        p = 0.663 — no significant deviation
+#   Dispersion:     p = 0.210 — no significant deviation
+#   Outlier test:   p = 1.000 — no outliers
+#   Residuals vs predicted: no significant problems detected
+#   Improvement over Q1 model — quantile deviation
+#     resolved once MPA categories added. However MPA
+#     not supported by AICc (DAICc = 0.89) — improvement
+#     reflects site characteristics not genuine protection.
+
 
 # ── Best Q3 model ─────────────────────────────────────────────
 # Q3 is a separate question — best Q2 model unchanged.
@@ -465,9 +504,18 @@ cat(sprintf("\nPearson r (predicted vs observed): %.3f\n",
             cor(pred_s, scraper_model_data$mean_biomass)))
 
 # ── Flagged sites ─────────────────────────────────────────────
-# Update row indices from diagnostic plots after running
-flagged_rows_s <- c(12)  # itsan (Comoros) — extreme low biomass
-# confirmed in family selection; Tweedie handles adequately
+# itsan (row 12, Comoros, none MPA): mean_biomass = 30.2g —
+#   lowest scraper biomass in dataset, ~130x below median.
+#   Low rugosity (z = -0.740). Drives Gaussian log rejection
+#   (Cook's distance > 1). Tweedie handles adequately —
+#   0 outliers in DHARMa. Genuine ecological observation,
+#   not a data error.
+# Site 11 flagged in Gaussian log upper tail (Q-Q and
+#   Scale-Location) but not influential in Tweedie —
+#   no action required.
+# No sites warrant exclusion.
+
+flagged_rows_s <- c(11, 12)
 
 scraper_model_data %>%
   slice(flagged_rows_s) %>%
@@ -534,15 +582,28 @@ s_sens_mg_conn <- glmmTMB(
   family = tweedie(link = "log"),
   data   = scraper_model_data)
 
-cat("\nQ2 — model comparison:\n")
+s_sens_mg_conn_int <- glmmTMB(
+  mean_biomass ~ rugosity_sc + log_chla_sc +
+    log_market_gravity_sc +
+    connectivity_sc +
+    log_market_gravity_sc:connectivity_sc,
+  family = tweedie(link = "log"),
+  data   = scraper_model_data)
+
+cat("\n--- Sensitivity (a): market gravity + interaction ---\n")
 print(make_aicc_df(list(
-  "Baseline + MG"        = s_q1_mktgrav,
-  "Baseline + MG + conn" = s_sens_mg_conn
+  "Baseline + MG"            = s_q1_mktgrav,
+  "Baseline + MG + conn"     = s_sens_mg_conn,
+  "Baseline + MG + conn + int" = s_sens_mg_conn_int
 )))
 
 cat("\nQ2 — connectivity coefficients:\n")
 print(summary(s_sens_mg_conn)$coefficients$cond)
 print(confint(s_sens_mg_conn))
+
+summary(s_sens_mg_conn_int)
+confint(s_sens_mg_conn_int)
+
 
 s_sens_mg_mpa <- glmmTMB(
   mean_biomass ~ rugosity_sc + log_chla_sc +
@@ -560,10 +621,32 @@ cat("\nQ3 — MPA coefficients:\n")
 print(summary(s_sens_mg_mpa)$coefficients$cond)
 print(confint(s_sens_mg_mpa))
 
-# Results: [update after running]
-# Expected: market gravity negative and significant
-# (b = -0.198, p = 0.049 from Q1 direction check);
-# connectivity and MPA conclusions consistent.
+
+# Sensitivity (a) — market gravity results:
+# Q2:
+#   Baseline + MG:        AICc = 1008.93, weight = 0.693
+#   Baseline + MG + conn: DAICc = 1.63,   weight = 0.307
+#   Connectivity not supported with MG included (DAICc = 1.63)
+#   Market gravity: b = -0.182, p = 0.071 . — marginal
+#   Connectivity:   b = -0.092, p = 0.310 ns
+#
+# Q3:
+#   Baseline + MG + conn:       AICc = 1010.56, weight = 0.932
+#   Baseline + MG + conn + MPA: DAICc = 5.24,   weight = 0.068
+#   MPA clearly not supported — consistent with primary Q3.
+#   Medium MPA: b = -0.113, p = 0.596 ns — not significant
+#     here (was significant in primary, p = 0.034) — the
+#     medium MPA artefact is attenuated when market gravity
+#     replaces settlement gravity.
+#   Low MPA: b = +0.038, p = 0.900 ns
+#
+# Sensitivity (a) conclusion:
+#   Market gravity negative in direction (b = -0.182,
+#   p = 0.071) — consistent with settlement gravity signal
+#   but weaker. Connectivity not supported under either
+#   metric specification. MPA negative and artefactual
+#   under settlement gravity; attenuated and ns under
+#   market gravity. Primary Q2 and Q3 conclusions robust.
 
 
 # ── (b) Transect-level replication ───────────────────────────
@@ -624,6 +707,14 @@ scr_trans_conn <- glmmTMB(
   family = tweedie(link = "log"),
   data   = scraper_transect_data)
 
+scr_trans_conn_int <- glmmTMB(
+  transect_scraper_biomass ~ rugosity_sc + log_chla_sc +
+    log_settlement_grav_sc +
+    connectivity_sc +
+    log_settlement_grav_sc:connectivity_sc + (1 | site),
+  family = tweedie(link = "log"),
+  data   = scraper_transect_data)
+
 scr_trans_mpa <- glmmTMB(
   transect_scraper_biomass ~ rugosity_sc + log_chla_sc +
     log_settlement_grav_sc +
@@ -637,6 +728,7 @@ print(make_aicc_df(list(
   "Baseline"            = scr_trans_baseline,
   "Baseline + pressure" = scr_trans_pressure,
   "Baseline + conn"     = scr_trans_conn,
+  "Baseline + conn + int" = scr_trans_conn_int,
   "Best + MPA"          = scr_trans_mpa
 )))
 
@@ -648,24 +740,35 @@ vc_s      <- VarCorr(scr_trans_pressure)
 site_sd_s <- sqrt(as.numeric(vc_s$cond$site))
 cat(sprintf("\nSite random intercept SD = %.3f\n", site_sd_s))
 
-# Results:
-#   Baseline + press: AICc = 4330.61, weight = 0.452
-#   Baseline + conn:  DAICc = 0.84,   weight = 0.296
-#   Best + MPA:       DAICc = 1.58,   weight = 0.205
-#   Baseline:         DAICc = 4.53,   weight = 0.047
-#   Null:             DAICc = 15.61,  weight = 0.000
+# Sensitivity (b) results:
+#   Baseline + pressure: AICc = 4330.61, weight = 0.452
+#   Baseline + conn:     DAICc = 0.84,   weight = 0.296
+#   Best + MPA:          DAICc = 1.58,   weight = 0.205
+#   Baseline:            DAICc = 4.53,   weight = 0.047
+#   Null:                DAICc = 15.61,  weight = 0.000
 #
-#   Pressure model best supported — consistent with
-#   site-level Q1. Null decisively rejected (DAICc =
-#   15.61) — strongest transect-level replication
-#   across all functional groups.
-#
-#   Settlement gravity: b = -0.283, p = 0.009 **
-#     Consistent with site-level (b = -0.261, p = 0.017).
-#   Rugosity: b = +0.178, p = 0.042 * — significant at
-#     transect level (marginal at site level, p = 0.126).
-#   Chla: b = +0.195, p = 0.054 . — consistent direction.
-#   Site random intercept SD = [update]
+#   Settlement gravity: b = -0.283, z = -2.62, p = 0.009 **
+#   Rugosity: b = +0.178, p = 0.042 * — significant
+#   Chla: b = +0.195, p = 0.054 . — consistent direction
+#   Site random intercept SD = 0.474
+#   Dispersion = 65.1 — high within-site variance.
+#   
+#   DHARMa diagnostics — transect baseline:
+#   KS test:        p = 0.579 — no significant deviation
+#   Dispersion:     p = 0.088 — no significant deviation
+#   Outlier test:   p = 0.253 — no significant outliers
+#   Residuals vs predicted: no significant problems detected
+#   2 red asterisks visible at upper margin — not flagged
+#     as significant outliers by binomial test (p = 0.253).
+#     
+#   DHARMa diagnostics — transect pressure model:
+#   KS test:        p = 0.915 — excellent fit
+#   Dispersion:     p = 0.144 — no significant deviation
+#   Outlier test:   p = 0.622 — no significant outliers
+#   Residuals vs predicted: quantile deviations detected
+#     (red curves, lower and upper quantiles). Combined
+#     adjusted quantile test n.s. — acceptable overall.
+#     Good fit at transect level.
 
 
 # ============================================================
@@ -675,15 +778,15 @@ cat(sprintf("\nSite random intercept SD = %.3f\n", site_sd_s))
 cat("\n--- Scraper results summary ---\n")
 tribble(
   ~Question,   ~Result,          ~Key_finding,
-  "Q1",        "Sett. gravity",  "weight = 0.562, DAICc = 2.85 vs baseline; b = -0.261, p = 0.017; fold diff = [update]x",
-  "Q1 chla",   "Significant",    "b = +0.204, p = 0.037; fold diff = [update]x — most robust baseline predictor",
+  "Q1",        "Sett. gravity",  "weight = 0.562, DAICc = 1.62 vs MG, 2.85 vs baseline; b = -0.261, p = 0.017; 2.84x (CI: 6.70x–1.21x)",
+  "Q1 chla",   "Significant",    "b = +0.204, p = 0.037; fold diff = 2.17x — robust across metrics",
   "Q2 conn",   "Not supported",  "DAICc = 1.28, weight = 0.345; b = -0.105, p = 0.238 ns",
-  "Q3 MPA",    "Not supported",  "DAICc = 0.89, weight = [update] — medium MPA negative, artefactual; best Q2 retained",
+  "Q3 MPA",    "Not supported",  "DAICc = 0.89, weight = 0.376 — medium MPA b = -0.422 negative, artefactual; best Q2 retained",
   "Q3 int",    "Not supported",  "MPA x pressure DAICc = 5.58",
   "Moran",     "No SAC",         "I = +0.033, p = 0.230",
-  "Pearson r", "[update]",       "[update after running]",
-  "Sens (a)",  "[update]",       "MG within threshold (DAICc < 2); [update after running]",
-  "Sens (b)",  "Consistent",     "pressure best at transect level (weight = 0.452); null DAICc = 15.61; site SD = [update]"
+  "Pearson r", "0.470",          "moderate fit",
+  "Sens (a)",  "Consistent",     "MG: b = -0.182 p = 0.071 marginal; conn ns; MPA attenuated and ns under MG",
+  "Sens (b)",  "Consistent",     "pressure best (weight = 0.452); null DAICc = 15.61; SG b = -0.283 p = 0.009; site SD = 0.474"
 ) %>% print()
 
 

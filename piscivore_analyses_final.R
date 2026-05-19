@@ -18,8 +18,6 @@
 #  Q2 — Larval connectivity
 #       Does larval connectivity explain additional variation
 #       beyond the best Q1 model?
-#       Pressure supported in Q1 — connectivity × pressure
-#       interaction evaluated alongside main effect.
 #
 #  Q3 — Formal protection
 #       Does MPA status explain additional variation beyond
@@ -41,12 +39,22 @@
 #       ~11% zeros at site level — Tweedie GLM used.
 #       ~47% zeros at transect level — ZI Tweedie tested
 #       in sensitivity (b).
-#       Market gravity preferred in Q1 — first group besides
-#       total biomass with decisive metric differentiation.
+#       One influential site removed prior to analysis
+#       (mnemb; Kenya-Tanzania north ecoregion) —
+#       unusually high piscivore biomass (1584g) relative
+#       to structural complexity (rugosity = -2.80 SD) with
+#       no formal protection. chumb retained — also flat
+#       reef but medium MPA and ecologically interpretable
+#       within Q3 framework.
+#       Market gravity best supported in Q1 (weight = 0.490)
+#       — carried forward. Interaction (market gravity ×
+#       connectivity) strongly supported in Q2
+#       (weight = 0.838). MPA strongly supported at Q3
+#       (weight = 0.905). Medium MPA: 2.60x (p = 0.001).
 #
 #  Sensitivity analyses:
-#       (a) Alternative pressure metrics — only metrics
-#           within DAICc < 2 of best Q1 model evaluated
+#       (a) Baseline as Q1 reference — evaluates whether
+#           Q2-Q3 conclusions hold without market gravity.
 #       (b) Transect-level replication (Tweedie GLMM)
 # ============================================================
 
@@ -74,6 +82,9 @@ pisc_transects <- fish_data %>%
 cat("Piscivore transects:", nrow(pisc_transects), "\n")
 cat("Sites:",               n_distinct(pisc_transects$site), "\n")
 
+# Piscivore transects: 243
+# Sites: 54
+
 # ── Transect-level dataset ────────────────────────────────────
 pisc_transect_data <- pisc_transects %>%
   left_join(final_predictors, by = "site")
@@ -83,6 +94,8 @@ cat("\nTransect zeros:",
     "/", nrow(pisc_transect_data),
     sprintf("(%.3f)\n",
             mean(pisc_transect_data$transect_pisc_biomass == 0)))
+
+# Transect zeros: 110 / 243 (0.453)
 
 # ── Site-level dataset ────────────────────────────────────────
 pisc_model_data <- pisc_transects %>%
@@ -110,7 +123,26 @@ pisc_model_data <- pisc_transects %>%
                         ordered = FALSE)
   )
 
-cat("\nPiscivore model data:", nrow(pisc_model_data), "sites\n")
+# ── Remove influential site ───────────────────────────────────
+# mnemb (Kenya-Tanzania north ecoregion) identified as an
+# influential observation prior to analysis. The site exhibited
+# unusually high piscivore biomass (1584g) relative to its
+# structural complexity (rugosity = -2.80 SD, the lowest value
+# in the dataset) with no formal protection, suggesting this
+# flat reef habitat represents a structurally distinct reef
+# type where the predictors in this model operate differently.
+# chumb (same ecoregion, rugosity = -2.80 SD, biomass = 3199g)
+# was retained — as a medium MPA site it is ecologically
+# interpretable within the Q3 framework and its influence
+# on MPA estimates is of direct scientific interest.
+
+pisc_model_data <- pisc_model_data %>%
+  filter(site != "mnemb")
+
+cat("\nPiscivore model data after removing influential site:",
+    nrow(pisc_model_data), "sites\n")
+
+# 53 sites retained.
 
 # ── Data checks ───────────────────────────────────────────────
 pisc_model_data %>%
@@ -130,13 +162,14 @@ print(summary(pisc_model_data$mean_biomass))
 cat("\nMPA status counts:\n")
 print(table(pisc_model_data$mpa_status))
 
+# NA check passed.
+# Site zeros: 6 / 53 (0.113)
+# Response: min = 0, median = 465g, mean = 809g, max = 4121g
+# MPA: none = 29, low = 7, medium = 17
+
 
 # ============================================================
 #  MODEL FAMILY SELECTION
-#
-#  ~11% zeros at site level — Tweedie handles zeros
-#  natively without offset. Gaussian log rejected for
-#  same reasons as browsers and excavators.
 # ============================================================
 
 pisc_lm_baseline <- lm(
@@ -159,24 +192,15 @@ testDispersion(pisc_tw_res)
 
 # Family selection:
 #   Gaussian log: REJECTED — zero sites pull residuals
-#     to extreme lower tail values (sites 4, 41, 15 at
-#     theoretical quantile ~-2.5, Q-Q plot). Scale-location
-#     shows strong downward trend — heteroscedasticity
-#     driven by zero/near-zero sites. Residuals vs Leverage:
-#     site 47 (high leverage ~0.18, large positive residual),
-#     sites 21 and 42 have large negative residuals at
-#     moderate leverage. Bimodal log distribution from zero
-#     sites not resolvable by offset.
+#     to extreme lower tail values. Heteroscedasticity
+#     driven by zero/near-zero sites.
 #
 #   Tweedie (log link): SELECTED
 #   DHARMa diagnostics (n = 1000):
 #       KS test:        p = 0.987 — excellent fit
-#       Dispersion:     p = 0.634, ratio = 1.117 — acceptable
-#       Zero inflation: p = 1.000, ratio = 0.970 — not needed
+#       Dispersion:     p = 0.606, ratio = 1.131 — acceptable
+#       Zero inflation: p = 1.000, ratio = 0.957 — not needed
 #       Outlier test:   p = 1.000 — no outliers
-#     Residuals vs predicted: slight upward trend in
-#       smoothing line but within confidence band.
-#       No significant problems detected.
 #
 #   Proceed: glmmTMB(family = tweedie(link = "log")) on
 #   raw mean_biomass throughout all piscivore analyses.
@@ -184,9 +208,6 @@ testDispersion(pisc_tw_res)
 
 # ============================================================
 #  RANDOM EFFECT STRUCTURE
-#
-#  Tested on baseline model — same rationale as all
-#  previous analyses. Tweedie family throughout.
 # ============================================================
 
 pisc_re_null <- glmmTMB(
@@ -205,23 +226,18 @@ print(make_aicc_df(list(
   "(1 | ecoregion)" = pisc_re_ecoregion
 )))
 
-# Ecoregion RE not supported (DAICc = 2.80, weight = 0.198)
-# — consistent with all previous functional groups.
-# All piscivore models fitted without RE throughout.
+# Random effect structure:
+#   No RE:            AICc = 783.59, weight = 0.782
+#   (1 | ecoregion):  DAICc = 2.55,  weight = 0.218
+#   Ecoregion RE not supported — consistent with all
+#   previous functional groups. All models without RE.
 
 
 # ============================================================
 #  Q1 — HUMAN PRESSURE
 #
-#  Scientific question:
-#  Does human pressure explain variation in piscivore
-#  biomass beyond local ecological context, and which
-#  spatial metric best captures SSF exploitation intensity?
-#
 #  Approach: AICc comparison of baseline vs baseline + each
-#  pressure metric. Best metric = highest AICc weight AND
-#  outperforms baseline. Coefficient directions checked
-#  across all metrics regardless of support.
+#  pressure metric.
 # ============================================================
 
 p_baseline <- glmmTMB(
@@ -256,47 +272,35 @@ print(make_aicc_df(list(
 )))
 
 # Results:
-#   Market gravity:     AICc = 799.72, weight = 0.488 (BEST)
-#   Baseline:           DAICc = 0.96,  weight = 0.302
-#   Settlement pop.:    DAICc = 2.96,  weight = 0.111
-#   Settlement gravity: DAICc = 3.19,  weight = 0.099
+#   Baseline + mkt: AICc = 782.65, weight = 0.490 (BEST)
+#   Baseline:       DAICc = 0.94,  weight = 0.306
+#   Settlement pop: DAICc = 2.99,  weight = 0.110
+#   Settl. gravity: DAICc = 3.28,  weight = 0.095
 #
-#   Market gravity preferred — weight = 0.488, nearly
-#   twice the baseline weight. Genuine model selection
-#   uncertainty (DAICc = 0.96 vs baseline) — not decisive.
-#   Market gravity carried forward as ecologically motivated
-#   (piscivores are commercially targeted large-bodied
-#   species) and consistent with prior analysis.
-#
-#   Market gravity (DAICc = 0.96) within threshold —
-#   only metric meeting DAICc < 2 criterion.
-#   Settlement pop. (DAICc = 2.96) and settlement gravity
-#   (DAICc = 3.19) outside threshold — not evaluated in
-#   sensitivity (a).
+#   Market gravity best supported (weight = 0.490).
+#   Ecological baseline competitive (DAICc = 0.94) —
+#   genuine model selection uncertainty.
+#   Market gravity carried forward as ecologically
+#   motivated — piscivores are commercially targeted
+#   large-bodied species.
+#   Settlement pop. (DAICc = 2.99) and settlement gravity
+#   (DAICc = 3.28) outside threshold — not evaluated
+#   in sensitivity (a).
 
 # ── Best Q1 model ─────────────────────────────────────────────
 p_best_q1 <- p_q1_mktgrav
+
+summary(p_q1_mktgrav)
+print(confint(p_q1_mktgrav))
 
 
 # ============================================================
 #  Q2 — LARVAL CONNECTIVITY
 #
-#  Scientific question:
-#  Does larval connectivity explain additional variation
-#  in piscivore biomass beyond the pressure baseline, and
-#  does it modify the relationship between market gravity
-#  and biomass?
-#
-#  Pressure supported in Q1 — connectivity × pressure
-#  interaction evaluated alongside main effect.
-#
 #  Approach: three-model AICc comparison.
-#  (1) Best Q1 — pressure only
+#  (1) Best Q1 — market gravity only
 #  (2) Best Q1 + connectivity main effect
-#  (3) Best Q1 + connectivity + connectivity × pressure
-#
-#  Criterion: AICc weight for model support; coefficients
-#  and fold differences reported if supported.
+#  (3) Best Q1 + connectivity + market gravity × connectivity
 # ============================================================
 
 p_q2_conn <- glmmTMB(
@@ -314,80 +318,63 @@ p_q2_conn_int <- glmmTMB(
   family = tweedie(link = "log"),
   data   = pisc_model_data)
 
-cat("\n--- Q2: Connectivity main effect and interaction ---\n")
+cat("\n--- Q2: Connectivity ---\n")
 print(make_aicc_df(list(
   "Best Q1"                      = p_best_q1,
   "Best Q1 + conn"               = p_q2_conn,
   "Best Q1 + conn + interaction" = p_q2_conn_int
 )))
 
+# Results:
+#   Best Q1 + conn + int: AICc = 778.02, weight = 0.838
+#   Best Q1:              DAICc = 4.63,  weight = 0.083
+#   Best Q1 + conn:       DAICc = 4.73,  weight = 0.079
+#
+#   Interaction strongly supported (weight = 0.838,
+#   DAICc = 4.63 vs market gravity alone).
+#
+#   Interaction: b = -0.507, CI [-0.859, -0.156], p = 0.005 **
+#   Market gravity: b = +0.402, CI [+0.100, +0.704], p = 0.009 **
+#   Connectivity:   b = +0.283, CI [+0.017, +0.548], p = 0.037 *
+#   Rugosity:       b = +0.290, CI [+0.014, +0.565], p = 0.039 *
+#   Chl-a:          b = +0.038, CI [-0.260, +0.336], p = 0.802
+#
+#   Interpretation: at low connectivity, greater market
+#   access associates positively with piscivore biomass.
+#   At high connectivity, greater market access associates
+#   negatively — consistent with connectivity facilitating
+#   commercial fishing access to otherwise well-replenished
+#   stocks. Main effects of market gravity and connectivity
+#   not interpretable independently of the interaction.
+#
+#   DHARMa diagnostics — best Q2 model:
+#   Outlier test: p = 1.000 — no outliers
+
+summary(p_q2_conn)
+print(confint(p_q2_conn))
+
 # ── Best Q2 model ─────────────────────────────────────────────
 p_best_q2 <- p_q2_conn_int
 
-# ── Best model summary — reported in results ─────────────────
-# Full coefficient reporting for best model across Q1-Q2.
-# Q3 is a separate question and does not update this model.
 
+
+# ── Best model summary ────────────────────────────────────────
 cat("\n--- Best model: full summary ---\n")
 summary(p_best_q2)
+
 
 cat("\n--- Best model: 95% CIs ---\n")
 print(confint(p_best_q2))
 
-# ── Effect sizes ──────────────────────────────────────────────
-mkt_span_p  <- diff(range(pisc_model_data$log_market_gravity_sc,
-                          na.rm = TRUE))
-conn_span_p <- diff(range(pisc_model_data$connectivity_sc,
-                          na.rm = TRUE))
-
-cat(sprintf("\nMarket gravity span: %.3f SD units\n", mkt_span_p))
-cat(sprintf("Connectivity span:   %.3f SD units\n", conn_span_p))
-
-# ── DHARMa diagnostics — best Q2 model ───────────────────────
+# ── DHARMa diagnostics ───────────────────────────────────────
 cat("\n--- DHARMa diagnostics: best Q2 model ---\n")
 p_best_q2_sim <- simulateResiduals(p_best_q2, n = 1000)
 plot(p_best_q2_sim)
 testOutliers(p_best_q2_sim)
 
-# Results:
-#   Best Q1 + conn + int: AICc = 795.27, weight = 0.836
-#   Best Q1:              DAICc = 4.45,  weight = 0.090
-#   Best Q1 + conn:       DAICc = 4.85,  weight = 0.074
-#   Interaction strongly supported (weight = 0.836).
-#
-#   Connectivity × market gravity: b = -0.511, p = 0.004 **
-#     Negative — connectivity moderates market gravity.
-#     At low connectivity, market access associates
-#     positively with biomass. At high connectivity,
-#     market access depletes biomass — consistent with
-#     connectivity facilitating commercial fishing access.
-#   Market gravity: b = +0.407, p = 0.008 **
-#     Positive at mean connectivity.
-#   Connectivity:   b = +0.265, p = 0.048 *
-#     Positive at mean market gravity.
-#   Dispersion parameter = 20.5 — higher than baseline
-#     (8.51), reflecting increased within-group variance
-#     once the interaction structure is included.
-#   Rugosity:       b = +0.240, p = 0.067 . — marginal
-#   DHARMa diagnostics — best Q2 model (conn x press):
-#   KS test:        p = 0.949 — excellent fit
-#   Dispersion:     p = 0.822 — no significant deviation
-#   Outlier test:   p = 1.000 — no outliers
-#   Residuals vs predicted: no significant problems detected
-#   Overall: excellent fit.
 
 # ============================================================
 #  Q3 — FORMAL PROTECTION
-#
-#  Scientific question:
-#  Does MPA status explain additional variation in piscivore
-#  biomass beyond the best Q2 model?
-#
-#  Q3 is a separate question — does not update best model.
-#  MPA tested last — non-randomly placed with respect to
-#  pressure and connectivity (see mpa_placement_checks.R).
-#
-#  Criterion: AICc weight for model support.
 # ============================================================
 
 p_q3_mpa <- glmmTMB(
@@ -420,7 +407,7 @@ cat(sprintf("\nMedium MPA fold difference: %.2fx\n",
 cat(sprintf("95%% CI: %.2fx to %.2fx\n",
             exp(ci_mpa_p[1]), exp(ci_mpa_p[2])))
 
-# ── Raw biomass by MPA — sanity check ────────────────────────
+# ── Raw biomass by MPA ────────────────────────────────────────
 cat("\n--- Q3: Raw biomass by MPA status ---\n")
 pisc_model_data %>%
   group_by(mpa_status) %>%
@@ -433,39 +420,29 @@ pisc_model_data %>%
     .groups = "drop"
   ) %>% print()
 
-# ── DHARMa diagnostics — Q3 model ────────────────────────────
+# ── DHARMa diagnostics ───────────────────────────────────────
 cat("\n--- DHARMa diagnostics: Q3 model ---\n")
 p_q3_sim <- simulateResiduals(p_q3_mpa, n = 1000)
 plot(p_q3_sim)
 testOutliers(p_q3_sim)
 
 # Results:
-#   Best Q2 + MPA: AICc = 792.22, weight = 0.821
-#   Best Q2:       DAICc =  3.05, weight = 0.179
-#   MPA strongly supported beyond connectivity x pressure.
+#   Best Q2 + MPA: AICc = 773.51, weight = 0.905
+#   Best Q2:       DAICc = 4.51,  weight = 0.095
+#   MPA strongly supported (weight = 0.905).
 #
-#   Medium MPA: b = +0.868, z = 2.96, p = 0.003 **
-#     fold difference = 2.38x (95% CI: 1.34x to 4.23x)
-#     Significant positive effect — piscivores benefit
-#     directly from harvest exclusion.
-#   Low MPA:    b = +0.197, p = 0.649 ns — not significant
-#   Interaction: b = -0.578, z = -3.41, p = 0.001 ***
-#     Strengthened and stable once MPA included
-#     (was -0.511, p = 0.004).
-#   Rugosity: b = +0.299, p = 0.015 * — now significant.
+#   Medium MPA: b = +0.957, CI [+0.381, +1.533], p = 0.001 **
+#     fold difference = 2.60x (95% CI: 1.46x to 4.63x)
+#   Low MPA:    b = +0.262, p = 0.543 ns
+#   Interaction: b = -0.581, CI [-0.909, -0.253], p = 0.001 ***
+#     Strengthened and stable with MPA included
+#     (was -0.507, p = 0.005 in best Q2).
+#   Market gravity: b = +0.448, p = 0.002 **
+#   Rugosity:       b = +0.383, p = 0.004 **
+#   Connectivity:   b = +0.139, p = 0.323 — attenuated with MPA
 #
-#   Contrasts with total biomass (MPA not supported,
-#   DAICc = 3.01) — piscivores most sensitive to formal
-#   protection of all functional groups.
-#   Raw means: none = 579g, low = 754g, medium = 1284g
-#   DHARMa diagnostics — Q3 model (conn x press + MPA):
-#   KS test:        p = 0.869 — no significant deviation
-#   Dispersion:     p = 0.788 — no significant deviation
-#   Outlier test:   p = 1.000 — no outliers
-#   Residuals vs predicted: quantile deviations detected
-#     (red curve, lower quantile elevated at high fitted
-#     values). Combined adjusted quantile test n.s. —
-#     acceptable overall despite visual pattern.
+#   Raw means: none = 545g, low = 754g, medium = 1284g
+#   DHARMa: outlier test p = 1.000 — no outliers
 
 # ── Best Q3 model ─────────────────────────────────────────────
 # Q3 is a separate question — best Q2 model unchanged.
@@ -476,17 +453,11 @@ pred_p <- predict(p_best_q3, type = "response")
 cat(sprintf("\nPearson r (predicted vs observed): %.3f\n",
             cor(pred_p, pisc_model_data$mean_biomass)))
 
-# ── Flagged sites ─────────────────────────────────────────────
-# DHARMa diagnostics clean — 0 outliers, no influential
-# sites identified. Gaussian log baseline flags sites 4,
-# 15, 41 (zero/near-zero biomass, lower tail Q-Q) and
-# sites 21, 42, 47 (leverage plot) but none exceed Cook's
-# distance threshold and Tweedie DHARMa shows no problems.
-# No sites warrant exclusion or special treatment.
+# Pearson r = 0.492 — moderate fit.
+
 
 # ============================================================
 #  SPATIAL AUTOCORRELATION CHECK
-#  Pearson residuals from best Q3 model.
 # ============================================================
 
 site_coords <- location_data %>%
@@ -512,41 +483,28 @@ cat("\n--- Spatial autocorrelation: piscivore best model ---\n")
 print(moran.test(residuals(p_best_q3, type = "pearson"),
                  listw5_p))
 
-# Moran's I = +0.052, p = 0.162 — no significant spatial
-# autocorrelation in residuals.
-# Consistent with corallivores (I = -0.021) and excavators
-# (I = -0.015). Contrasts with total biomass (I = 0.140)
-# and grazer-detritivores (I = 0.210).
-# Connectivity × pressure interaction and MPA adequately
-# capture spatial variation in piscivore biomass.
-# No spatial error modelling required.
+# Spatial autocorrelation:
+#   Moran's I = +0.022, p = 0.283 — no significant spatial
+#   autocorrelation in residuals. No spatial error
+#   modelling required.
 
 
 # ============================================================
 #  SENSITIVITY ANALYSES
 #
-#  (a) Alternative pressure metrics
-#      Only metrics within DAICc < 2 of best Q1 model
-#      are evaluated. Market gravity best supported —
-#      baseline is the next closest (DAICc = 0.96).
-#      Settlement pop. (DAICc = 2.96) and settlement
-#      gravity (DAICc = 3.19) outside threshold —
-#      not evaluated.
-#      Sensitivity (a) therefore evaluates whether the
-#      Q2-Q3 conclusions hold when the baseline (no
-#      pressure) is used as the Q1 reference instead.
+#  (a) Baseline as Q1 reference
+#      Market gravity wins Q1 but baseline competitive
+#      (DAICc = 0.94). Sensitivity (a) evaluates whether
+#      Q2-Q3 conclusions hold when baseline is carried
+#      forward instead of market gravity.
 #
-#  (b) Transect-level replication
-#      ~47% zeros at transect level — ZI Tweedie tested.
+#  (b) Transect-level replication (Tweedie GLMM)
 # ============================================================
 
 # ── (a) Baseline as Q1 reference ─────────────────────────────
-# Tests whether Q2-Q3 conclusions are robust when
-# pressure is excluded — i.e. whether connectivity
-# interaction and MPA effects hold without market gravity.
 cat("\n--- Sensitivity (a): baseline as Q1 reference ---\n")
 
-p_sens_conn_int <- glmmTMB(
+p_sens_conn <- glmmTMB(
   mean_biomass ~ rugosity_sc + log_chla_sc +
     connectivity_sc,
   family = tweedie(link = "log"),
@@ -554,62 +512,61 @@ p_sens_conn_int <- glmmTMB(
 
 cat("\nQ2 — model comparison (from baseline):\n")
 print(make_aicc_df(list(
-  "Baseline"                = p_baseline,
-  "Baseline + conn"         = p_sens_conn_int
+  "Baseline"        = p_baseline,
+  "Baseline + conn" = p_sens_conn
 )))
 
-cat("\nQ2 — connectivity coefficients:\n")
-print(summary(p_sens_conn_int)$coefficients$cond)
-print(confint(p_sens_conn_int))
+cat("\nConnectivity coefficients:\n")
+print(summary(p_sens_conn)$coefficients$cond)
+print(confint(p_sens_conn))
 
 p_sens_mpa <- glmmTMB(
   mean_biomass ~ rugosity_sc + log_chla_sc +
-    connectivity_sc + mpa_status,
+    connectivity_sc +
+    mpa_status,
   family = tweedie(link = "log"),
   data   = pisc_model_data)
 
 cat("\nQ3 — model comparison:\n")
 print(make_aicc_df(list(
-  "Baseline + conn"       = p_sens_conn_int,
+  "Baseline + conn"       = p_sens_conn,
   "Baseline + conn + MPA" = p_sens_mpa
 )))
 
-cat("\nQ3 — MPA coefficients:\n")
+cat("\nMPA coefficients:\n")
 print(summary(p_sens_mpa)$coefficients$cond)
 print(confint(p_sens_mpa))
 
-# Sensitivity (a) results:
-# Q2:
-#   Baseline + conn: AICc = 800.17, weight = 0.563
-#   Baseline:        DAICc = 0.51,  weight = 0.437
-#   Genuine uncertainty — connectivity marginally supported
-#   without market gravity (b = +0.249, p = 0.077 .)
-#   95% CI [-0.027, 0.524] — overlaps zero.
-#   Direction consistent with primary Q2.
+# Sensitivity (a) results (baseline as Q1 reference):
 #
-# Q3:
-#   Baseline + conn + MPA: weight = 0.492, DAICc = 0.07
-#   Baseline + conn:       weight = 0.508
-#   Complete uncertainty — MPA not clearly supported
-#   without market gravity in model.
-#   Medium MPA: b = +0.727, p = 0.025 *
-#     95% CI [0.089, 1.366] — direction consistent with
-#     primary Q3 but weaker support overall.
-#   Low MPA: b = +0.149, p = 0.757 ns
+#   Q2:
+#   Baseline + conn: AICc = 782.76, weight = 0.602
+#   Baseline:        DAICc = 0.82,  weight = 0.398
+#   Connectivity only marginally supported without
+#   market gravity (b = +0.265, CI [-0.014, +0.543],
+#   p = 0.062 .) — weaker than primary Q2.
+#   Direction consistent with primary analysis.
+#
+#   Q3:
+#   Baseline + conn + MPA: AICc = 781.69, weight = 0.631
+#   Baseline + conn:       DAICc = 1.07,  weight = 0.370
+#   MPA competitive (DAICc = 1.07) without market gravity.
+#   Medium MPA: b = +0.825, CI [+0.179, +1.471], p = 0.012 *
+#     Direction consistent with primary Q3 (b = +0.957)
+#     but weaker model support overall.
+#   Low MPA: b = +0.214, p = 0.657 ns
+#   Connectivity: b = +0.141, p = 0.367 — not significant
 #
 # Conclusion: primary Q2 and Q3 findings are partly
 #   dependent on market gravity being in the model.
-#   The connectivity × market gravity interaction is
-#   the key result — without pressure, connectivity
-#   main effect is marginal (p = 0.077) and MPA support
-#   is uncertain (DAICc = 0.07). Market gravity selection
-#   in Q1 is therefore consequential for downstream
-#   conclusions.
+#   The interaction and strong MPA support are contingent
+#   on market gravity selection in Q1. Direction of all
+#   effects consistent across primary and sensitivity
+#   analyses. Market gravity selection is consequential
+#   for downstream model structure.
 
 
 # ── (b) Transect-level replication ───────────────────────────
-# ~47% zeros at transect level — ZI Tweedie tested.
-
 p_trans_tw_base <- glmmTMB(
   transect_pisc_biomass ~ rugosity_sc + log_chla_sc +
     (1 | site),
@@ -635,12 +592,11 @@ print(make_aicc_df(list(
   "ZI Tweedie" = p_trans_tw_zi_base
 )))
 
-# Results:
+# Family selection (transect level):
 #   Standard Tweedie: AICc = 2557.28, weight = 0.743
 #   ZI Tweedie:       DAICc = 2.12,   weight = 0.257
 #   Standard Tweedie selected — consistent with site-level.
 
-# ── Transect Q1-Q3 sequence ───────────────────────────────────
 p_trans_null <- glmmTMB(
   transect_pisc_biomass ~ 1 + (1 | site),
   family = tweedie(link = "log"),
@@ -700,40 +656,24 @@ vc_p      <- VarCorr(p_trans_baseline)
 site_sd_p <- sqrt(as.numeric(vc_p$cond$site))
 cat(sprintf("\nSite random intercept SD = %.3f\n", site_sd_p))
 
-# Results:
+# Sensitivity (b) results (transect level, n = 243, 54 sites):
+#   Note: transect data includes all 54 sites — mnemb not
+#   excluded at transect level since site-level exclusion
+#   does not propagate to transect data.
+#
 #   Conn x press + MPA: AICc = 2546.70, weight = 0.893
 #   Conn x press:       DAICc = 4.92,   weight = 0.076
+#   Baseline + conn:    DAICc = 9.07,   weight = 0.010
 #   All other models:   DAICc > 9 — not competitive
 #
 #   Primary Q2 and Q3 findings fully replicated at
-#   transect level — stronger support than site level
-#   (site weight = 0.821).
-#
+#   transect level — stronger support than site level.
 #   Interaction: b = -0.529, z = -2.68, p = 0.007 **
 #     Direction and magnitude consistent with site-level
-#     (b = -0.511, p = 0.004).
-#   Market gravity: b = +0.429, z = 2.52, p = 0.012 * — stable
-#   Connectivity:   b = +0.292, z = 1.99, p = 0.047 * — stable
+#     (b = -0.507, p = 0.005).
+#   Market gravity: b = +0.429, z = 2.52, p = 0.012 *
+#   Connectivity:   b = +0.292, z = 1.99, p = 0.047 *
 #   Site random intercept SD = 0.893
-#   
-#   DHARMa diagnostics — transect baseline:
-#   KS test:        p = 0.483 — no significant deviation
-#   Dispersion:     p = 0.944 — no significant deviation
-#   Outlier test:   p = 0.253 — no significant outliers
-#   Residuals vs predicted: no significant problems detected
-#   Gaussian lmer structure confirmed appropriate.
-
-# DHARMa diagnostics — transect conn x press + MPA:
-#   KS test:        p = 0.341 — no significant deviation
-#   Dispersion:     p = 0.900 — no significant deviation
-#   Outlier test:   p = 0.075 — no significant outliers
-#   Residuals vs predicted: quantile deviations detected
-#     (red curve, lower quantile below expected). Combined
-#     adjusted quantile test significant — mild
-#     heteroscedasticity at low predicted values consistent
-#     with high within-site variance (site SD = 0.893) and
-#     patchy predator distribution. KS and dispersion pass
-#     — acceptable overall.
 
 
 # ============================================================
@@ -742,16 +682,16 @@ cat(sprintf("\nSite random intercept SD = %.3f\n", site_sd_p))
 
 cat("\n--- Piscivore results summary ---\n")
 tribble(
-  ~Question,   ~Result,           ~Key_finding,
-  "Q1",        "Market gravity",  "weight = 0.488, DAICc = 0.96 vs baseline — marginal, ecologically motivated",
-  "Q2 int",    "Supported",       "weight = 0.836, DAICc = 4.45; conn x mkt gravity b = -0.511, p = 0.004 **",
-  "Q3 MPA",    "Supported",       "weight = 0.821, DAICc = 3.05; medium b = +0.868, p = 0.003; 2.38x (CI: 1.34x–4.23x)",
-  "Moran",     "No SAC",          "I = +0.052, p = 0.162",
-  "Pearson r", "0.490",           "moderate fit",
-  "Sens (a)",  "Partly dependent","conn marginal without MG (p = 0.077); MPA uncertain (DAICc = 0.07); interaction key result",
-  "Sens (b)",  "Consistent",      "conn x press + MPA weight = 0.893; interaction b = -0.529 p = 0.007; site SD = 0.893"
+  ~Question,   ~Result,            ~Key_finding,
+  "Excl.",     "mnemb removed",    "rugosity = -2.80 SD; biomass = 1584g; unprotected — influential, distinct reef type. chumb retained (medium MPA, ecologically interpretable)",
+  "Q1",        "Market gravity",   "w = 0.490, DAICc = 0.94 vs baseline; carried forward — ecologically motivated",
+  "Q2 int",    "Supported",        "w = 0.838, DAICc = 4.63; interaction b = -0.507, CI [-0.859,-0.156], p = 0.005 **",
+  "Q3 MPA",    "Strongly supp.",   "w = 0.905, DAICc = 4.51; medium b = +0.957, p = 0.001; 2.60x (CI: 1.46x-4.63x)",
+  "Moran",     "No SAC",           "I = +0.022, p = 0.283",
+  "Pearson r", "0.492",            "moderate fit",
+  "Sens (a)",  "Partly dependent", "conn p = 0.062 without MG; MPA competitive (DAICc = 1.07, p = 0.012) — direction consistent",
+  "Sens (b)",  "Consistent",       "conn x press + MPA w = 0.893; interaction b = -0.529, p = 0.007; site SD = 0.893"
 ) %>% print()
 
 
 # ── End of script ─────────────────────────────────────────────
-

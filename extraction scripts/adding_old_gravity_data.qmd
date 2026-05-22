@@ -1,0 +1,355 @@
+---
+title: "adding_old_gravity_data"
+author: "Candela Ferrer Diez"
+date: 2025-11-06
+format: 
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+    theme: cosmo
+    embed-resources: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Overview
+
+...
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+## Restore ...
+
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+```{r}
+#| label: renv-restore
+renv::restore()
+```
+
+## Load the necessary packages (these can be found in ...)
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load required libraries
+library(sf)           # For spatial data handling
+library(dplyr)        # For data manipulation
+library(terra)        # Alternative for raster operations (if needed)
+library(here)
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+## Import required functions
+
+I wonder if from the extracting documents I can only extract the necessary functions (not the whole doc) Or maybe I should create a separate extraction doc for human gravity
+
+```{r}
+#| label: load-functions
+#| echo: false
+#| include: false
+
+# Import data extraction functions
+source(here::here("functions", "extracting.R"))
+
+```
+
+# Adding Human Gravity
+
+Human gravity is ...
+
+## 2009 dataset
+
+### Location data
+
+...
+
+```{r}
+#| label: load-2009-location-data
+
+# Load location data and add columns to add relevant chlor-a data
+locations_2009 <- read_rds(
+  here::here("processed_data", "clean_location_2009.rds")) %>% 
+  dplyr::select(date, station, site, country, latitude, longitude) 
+#%>% 
+ # dplyr::mutate(closest_cell_lat =0, closest_cell_lon=0, cell_distance_km = 0, chla_annual_mean = 0)
+```
+
+### Convert to Spatial Format
+
+Transform the location data into a spatial object (simple features) to enable spatial operations and joins with the gravity data.
+
+```{r}
+#| label: locations-to-sf-2009
+#| echo: false
+#| warning: false
+
+# Convert to sf object with WGS84 coordinate system
+locations_sf <- st_as_sf(locations_2009, 
+                     coords = c("longitude", "latitude"),
+                     crs = 4326,  # WGS84
+                     remove = FALSE)  # Keep original lon/lat columns
+
+```
+
+## Gravity Data
+
+### Load Gravity Data
+
+Load the human gravity shapefile which contains modeled human pressure on coral reefs based on population density and accessibility within a 500 km radius. ... (more about this)
+
+```{r}
+#| label: load-gravity-data
+#| echo: false
+#| warning: false
+
+# Load the human gravity shapefile
+gravity_data <- st_read(here::here("raw_data", "Total Gravity of Coral Reefs 1.0.shp"))
+
+```
+
+### Extract Gravity Values
+
+Match each survey site to the nearest gravity grid cell and extract the human pressure values. I will be doing this through a spatial join by finding the nearest gravity grid cell for each cell - For each site in sites_sf, find the nearest polygon in gravity_data and copy all its attributes (reef_id, grav_tot) to that site's row
+
+```{r}
+#| label: extract-gravity
+#| echo: false
+#| warning: false
+
+sf_use_s2(FALSE)
+
+locations_with_gravity <- locations_sf %>%
+  
+  # compute index of the nearest gravity cell for each site
+  mutate(nearest_idx = st_nearest_feature(., gravity_data)) %>%
+  
+  # bind the gravity columns by indexing the gravity table with nearest_idx
+  {
+    # grab grav columns from gravity table as a plain data.frame/tibble
+    grav_df <- st_drop_geometry(gravity_data) %>% dplyr::select(contains("Grav"))
+    # bind the matching rows (use drop = FALSE to preserve columns when single column)
+    bind_cols(., grav_df[.$nearest_idx, , drop = FALSE])
+  } %>%
+  
+  # compute distance once using the stored index
+  mutate(distance_to_grid_km = as.numeric(
+    st_distance(., gravity_data[nearest_idx, ], by_element = TRUE)
+  ) / 1000) %>%
+  
+  # drop geometry and keep only the desired columns (nearest_idx will be removed)
+  st_drop_geometry() %>%
+  dplyr::select(
+    date, station, site, country,
+    latitude, longitude,
+    contains("Grav"),
+    distance_to_grid_km
+  )
+
+```
+
+### Checking results
+
+Convert the spatial object back to a regular dataframe and organize columns for easier interpretation.
+
+```{r}
+#| label: check-results
+#| echo: false
+#| warning: false
+
+
+local({
+  # local scope - prevents unnecessary objects that clutter the global environment
+  missing_grav <- locations_with_gravity %>% filter(is.na(Grav_tot))
+
+  if (nrow(missing_grav) > 0) {
+    cat("⚠ Warning:", nrow(missing_grav), "sites missing gravity values\n")
+    # drop geometry for nicer printing and only show the key columns
+    print(missing_grav %>% st_drop_geometry() %>% select(station, site, location))
+  } else {
+    cat("All sites successfully matched with gravity values\n")
+  }
+
+  invisible(NULL)  # nothing returned to the parent environment
+})
+
+```
+
+# Save data
+
+...
+
+```{r}
+
+#| label: export-results
+#| echo: false
+#| warning: false
+
+#load libraries
+library(dplyr)
+library(sf)
+
+
+# Save csv
+write.csv(locations_with_gravity , here::here("processed_data", "locations_with_gravity.csv"))
+```
+
+## 2018 dataset
+
+### Location data
+
+...
+
+```{r}
+#| label: load-2009-location-data
+
+# Load location data and add columns to add relevant chlor-a data
+locations_2009 <- read_rds(
+  here::here("processed_data", "clean_location_2009.rds")) %>% 
+  dplyr::select(date, station, site, country, latitude, longitude) 
+#%>% 
+ # dplyr::mutate(closest_cell_lat =0, closest_cell_lon=0, cell_distance_km = 0, chla_annual_mean = 0)
+```
+
+### Convert to Spatial Format
+
+Transform the location data into a spatial object (simple features) to enable spatial operations and joins with the gravity data.
+
+```{r}
+#| label: locations-to-sf-2009
+#| echo: false
+#| warning: false
+
+# Convert to sf object with WGS84 coordinate system
+locations_sf <- st_as_sf(locations_2009, 
+                     coords = c("longitude", "latitude"),
+                     crs = 4326,  # WGS84
+                     remove = FALSE)  # Keep original lon/lat columns
+
+```
+
+## Gravity Data
+
+### Load Gravity Data
+
+Load the human gravity shapefile which contains modeled human pressure on coral reefs based on population density and accessibility within a 500 km radius. ... (more about this)
+
+```{r}
+#| label: load-gravity-data
+#| echo: false
+#| warning: false
+
+# Load the human gravity shapefile
+gravity_data <- st_read(here::here("raw_data", "Total Gravity of Coral Reefs 1.0.shp"))
+
+```
+
+### Extract Gravity Values
+
+Match each survey site to the nearest gravity grid cell and extract the human pressure values. I will be doing this through a spatial join by finding the nearest gravity grid cell for each cell - For each site in sites_sf, find the nearest polygon in gravity_data and copy all its attributes (reef_id, grav_tot) to that site's row
+
+```{r}
+#| label: extract-gravity
+#| echo: false
+#| warning: false
+
+sf_use_s2(FALSE)
+
+locations_with_gravity <- locations_sf %>%
+  
+  # compute index of the nearest gravity cell for each site
+  mutate(nearest_idx = st_nearest_feature(., gravity_data)) %>%
+  
+  # bind the gravity columns by indexing the gravity table with nearest_idx
+  {
+    # grab grav columns from gravity table as a plain data.frame/tibble
+    grav_df <- st_drop_geometry(gravity_data) %>% dplyr::select(contains("Grav"))
+    # bind the matching rows (use drop = FALSE to preserve columns when single column)
+    bind_cols(., grav_df[.$nearest_idx, , drop = FALSE])
+  } %>%
+  
+  # compute distance once using the stored index
+  mutate(distance_to_grid_km = as.numeric(
+    st_distance(., gravity_data[nearest_idx, ], by_element = TRUE)
+  ) / 1000) %>%
+  
+  # drop geometry and keep only the desired columns (nearest_idx will be removed)
+  st_drop_geometry() %>%
+  dplyr::select(
+    date, station, site, country,
+    latitude, longitude,
+    contains("Grav"),
+    distance_to_grid_km
+  )
+
+```
+
+### Checking results
+
+Convert the spatial object back to a regular dataframe and organize columns for easier interpretation.
+
+```{r}
+#| label: check-results
+#| echo: false
+#| warning: false
+
+
+local({
+  # local scope - prevents unnecessary objects that clutter the global environment
+  missing_grav <- locations_with_gravity %>% filter(is.na(Grav_tot))
+
+  if (nrow(missing_grav) > 0) {
+    cat("⚠ Warning:", nrow(missing_grav), "sites missing gravity values\n")
+    # drop geometry for nicer printing and only show the key columns
+    print(missing_grav %>% st_drop_geometry() %>% select(station, site, location))
+  } else {
+    cat("All sites successfully matched with gravity values\n")
+  }
+
+  invisible(NULL)  # nothing returned to the parent environment
+})
+
+```
+
+# Save data
+
+...
+
+```{r}
+
+#| label: export-results
+#| echo: false
+#| warning: false
+
+#load libraries
+library(dplyr)
+library(sf)
+
+# Export results
+write.csv(sites_with_gravity, 
+          "sites_with_gravity_2018.csv", 
+          row.names = FALSE)
+
+# Export summaries
+# write.csv(country_summary, 
+#         "gravity_summary_by_country.csv", 
+#          row.names = FALSE)
+
+# write.csv(location_summary, 
+#          "gravity_summary_by_location.csv", 
+#          row.rows = FALSE)
+
+# Save as spatial file if needed for GIS
+# st_write(sites_with_gravity, 
+#          "sites_with_gravity.shp", 
+#         delete_dsn = TRUE)  # Overwrite if exists
+```

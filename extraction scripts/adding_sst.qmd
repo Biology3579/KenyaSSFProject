@@ -1,0 +1,408 @@
+---
+title: "adding_sst"
+author: "Candela Ferrer Diez"
+date: 2025-12-01
+format: html
+editor: visual
+---
+
+# Overview
+
+This document processes NASA Ocean Color Level-3 binned (L3b) sea-surface temperature data (SST) for the Western Indian Ocean (WIO) region. The script:
+
+-   Reads HDF5/NetCDF files containing binned satellite ocean color data
+-   Converts NASA bin numbers to geographic coordinates (lat/lon)
+-   Filters data to the WIO Area of Interest (37°E - 47°E, 15°S - 1°N)
+-   Exports combined data to CSV and Parquet format
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README to ensure proper setup and usage.*
+
+## Load required libraries
+
+```{r}
+#| label: load-packages
+#| echo: false
+#| include: false
+
+# Load required libraries
+library(here)
+library(ncdf4)
+library(data.table)
+library(arrow)
+library(sf)
+library(tidyverse) 
+library(dplyr)      
+library(readr)
+
+```
+
+renv::restore() loads the necessary package versions along with the necessary dependencies. Information about this can be found in the lockfile (\[where...\] in the Github repository).
+
+```{r}
+#| label: renv-restore
+renv::restore()
+```
+
+## Load functions
+
+Loads the necessary extraction functions to find, extract and process satellite-derived SST data
+
+```{r}
+#| label: call-for-functions
+#| echo: false
+#| message: false
+
+# Source structure exploration function
+source(here::here("functions", "extracting.R"))
+```
+
+# Sea Surface Temperature (SST) Extraction
+
+SST is used as a proxy for ... It will be extracted from ... and processed like so... \[general descripiton\]
+
+## Chlor a data for 2009
+
+### Define path to raw chlor a files for 2009
+
+```{r}
+#| label: find-sst-files-2009
+
+# Define path to all the raw sst files 
+sst_filenames_2009 <- list.files(
+  here::here("raw_data", "sst_raw_2009"),
+  full.names = TRUE)
+```
+
+### Extract raw chlor a data for 2009 from NASA L3b files
+
+This extracts the relevant data from each of the satellite extarction files.
+
+*See extracting.r document in functions folder to find the data extraction functions*
+
+```{r}
+#| label: process-sst-files-2009
+
+sst_data_list_2009 <- lapply(sst_filenames_2009, function(f) {
+  extract_sat_data(filepath = f,  metric_name = "sst",)
+})
+
+# Combine into a single data table
+raw_sst_2009 <- data.table::rbindlist(sst_data_list_2009, use.names = TRUE, fill = TRUE) %>% filter(!is.na(sst))
+
+message(sprintf("Processing complete. Total rows extracted: %d", nrow(raw_sst_2009)))
+```
+
+#### Save raw chlor-a data for 2009
+
+Save the data table with the extracted chlor-a for ease of use
+
+```{r}
+#| label: save-sst-data-2009
+
+# Save csv
+fwrite(raw_sst_2009, here::here("raw_data", "raw_sst_2009.csv"))
+
+# Load if needed (avoid having to run the code again)
+# raw_sst_2009 <- read.csv(here::here("raw_data", "raw_sst_2009.csv"))
+
+```
+
+### Match raw sst data to each station in 2009-2016 data set
+
+#### Load 2009-2016 fish location data and empty columns to add chor-a data values
+
+```{r}
+#| label: load-2009-location-data
+
+# Load location data and add columns to add relevant chlor-a data
+locations_2009 <- read_rds(
+  here::here("processed_data", "clean_location_2009.rds")) %>% 
+  dplyr::select(date, station, site, country, latitude, longitude) %>% 
+  dplyr::mutate(closest_cell_lat =0, closest_cell_lon=0, cell_distance_km = 0)
+```
+
+#### Find nearest satellite cells of chlor-a values to 2009 stations
+
+\[explain what this chuck is doing exactly...\]
+
+```{r}
+#| label: find-nearest-satellite-cells-2009
+
+# For each station, find and assign the nearest satellite cell
+locations_with_sst_sat_2009 <- assign_nearest_cell(raw_sst_2009, locations_2009) %>% 
+  dplyr::mutate(sst_annual_mean = 0)
+```
+
+#### Add annual chlorophyll a means to fish location data
+
+```{r}
+#| label: add-annual-mean-2009
+
+# Adding annual chlorophyll a means
+locations_with_sst_2009 <- compute_annual_mean(locations_with_sst_sat_2009, raw_sst_2009, 'sst', 'sst_annual_mean')
+```
+
+### Save merged data
+
+```{r}
+#| label: save-merged-sst-data-2009
+
+# Save csv
+fwrite(locations_with_sst_2009 , here::here("processed_data", "locations_with_sst_2009.csv"))
+
+# Load if needed
+# locations_with_sst_2009 <- read.csv( here::here("processed_data", "locations_with_sst_2009.csv"))
+```
+
+## Quality checks 2009
+
+#### Notes on Data Quality
+
+**Important considerations:**
+
+-   This is a **monthly composite** product, which reduces cloud gaps
+-   The spatial resolution is **4km**, so nearby sites will have similar values
+
+### Visualise satellite match on a map for 2009
+
+```{r}
+#| label: visualise-sat-match-2009
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+focus_region <- world %>%
+  filter(admin %in% c("Kenya", "Tanzania", "Comoros", "Mozambique", "Madagascar"))
+
+# Create the map with a tighter zoom
+map_plot_2009 <- ggplot() +
+  
+  # Plot all countries in Africa as the base layer
+  geom_sf(data = world[world$continent == "Africa",], 
+          fill = "gray95", color = "gray50", size = 0.3) + 
+  
+  geom_sf(data = focus_region, fill = "lightblue", color = "gray30", size = 0.3) +
+  
+  geom_point(data = locations_2009,
+             aes(x = longitude, y = latitude, ),
+             alpha = 0.6, color = "#440154") +
+            # each country gets a different 
+
+  #geom_point(data = raw_sst_2009, 
+  #           aes(x = lon, y = lat),
+  #           alpha = 0.6, color = "darkblue")+
+  geom_point(data = raw_sst_2009, 
+             aes(x = lon, y = lat),
+             alpha = 0.01, color = "red")+
+  
+  
+  scale_size_continuous(name = "Number of\nObservations", 
+                        range = c(0.5, 5),
+                        breaks = c(10, 25, 50, 75, 100, 150, 200)) +
+  
+  # Specify region of focus
+  coord_sf(xlim = c(36, 55), ylim = c(1, -19)) + 
+  
+  labs(title = "Marine Survey Sites in Kenya",
+       subtitle = "Point size represents number of fish observations per site",
+       x = "Longitude", y = "Latitude") +
+  
+  theme_minimal() +
+  theme(panel.grid.major = element_line(color = "gray90", linewidth = 0.2),
+        panel.background = element_rect(fill = "aliceblue"),
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "right")
+
+print(map_plot_2009)
+```
+
+### Match Quality Histogram 2009
+
+```{r}
+#| label: plot-match-quality
+#| fig-width: 10
+#| fig-height: 6
+
+locations_with_sst_2009 %>%
+  filter(!is.na(cell_distance_km)) %>%
+  ggplot(aes(x = cell_distance_km)) +
+  geom_histogram(bins = 30, fill = "coral", alpha = 0.7) +
+  labs(
+    title = "Distribution of Spatial Match Distances",
+    subtitle = "Distance between survey location and nearest sst grid cell",
+    x = "Distance (km)",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+## SST data for 2018
+
+### Define path to raw sst files for 2018
+
+```{r}
+#| label: find-sst-files-2018
+
+# Define path to all the raw sst files 
+sst_filenames_2018 <- list.files(
+  here::here("raw_data", "sst_raw_2018"),
+  full.names = TRUE)
+```
+
+### Extract raw chlor a data for 2018 from NASA L3b files
+
+This extracts the relevant data from each of the statellite extarction files.
+
+*See extracting.r document in functions folder to find the data extraction functions*
+
+```{r}
+#| label: process-sst-files-2018
+
+sst_data_list_2018 <- lapply(sst_filenames_2018, function(f) {
+  extract_sat_data(filepath = f)
+})
+
+# Combine into a single data table
+raw_sst_2018 <- data.table::rbindlist(sst_data_list_2018, use.names = TRUE, fill = TRUE)
+raw_sst_2018 <- raw_sst_2018 %>% filter(!is.na(chlor_a))
+message(sprintf("Processing complete. Total rows extracted: %d", nrow(raw_sst_2018)))
+```
+
+#### Save raw chlor-a data for 2018
+
+Save the data table with the extracted chlor-a for ease of use
+
+```{r}
+#| label: save-sst-data-2018
+
+# Save csv
+fwrite(raw_sst_2018, here::here("raw_data", "raw_sst_2018.csv"))
+```
+
+### Match raw chlor-a data to each station in 2018-2016 data set
+
+#### Load 2018-2016 fish location data and empty columns to add chor-a data values
+
+```{r}
+#| label: load-2018-location-data
+
+# Load location data and add columns to add relevant chlor-a data
+locations_2018 <- read_rds(
+  here::here("processed_data", "clean_location_2018.rds")) %>% 
+  dplyr::select(date, station, site, country, latitude, longitude) %>% 
+  dplyr::mutate(closest_cell_lat =0, closest_cell_lon=0, cell_distance_km = 0)
+```
+
+#### Find nearest satellite cells of chlor-a values to 2018 stations
+
+\[explain what this chuck is doing exactly...\]
+
+```{r}
+#| label: find-nearest-satellite-cells-2018
+
+# For each station, find and assign the nearest satellite cell
+locations_with_sst_sat_2018 <- assign_nearest_cell(raw_sst_2018, locations_2018)%>% 
+  dplyr::mutate(sst_annual_mean = 0)
+```
+
+#### Add annual chlorophyll a means to fish location data
+
+```{r}
+#| label: add-annual-mean-2018
+
+# Adding annual chlorophyll a means
+locations_with_sst_2018 <- compute_annual_mean(locations_with_sst_sat_2018, raw_sst_2018, 'chlor_a', 'sst_annual_mean')
+```
+
+### Save merged data
+
+```{r}
+#| label: save-merged-sst-data-2018
+
+# Save csv
+fwrite(locations_with_sst_2018 , here::here("processed_data", "locations_with_sst_2018.csv"))
+```
+
+## Quality checks 2018
+
+### Visualise satellite match on a map for 2018
+
+```{r}
+#| label: visualise-sat-match-2018
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+focus_region <- world %>%
+  filter(admin %in% c("Kenya", "Tanzania", "Comoros"))
+
+# Create the map with a tighter zoom
+map_plot_2018 <- ggplot() +
+  
+  # Plot all countries in Africa as the base layer
+  geom_sf(data = world[world$continent == "Africa",], 
+          fill = "gray95", color = "gray50", size = 0.3) + 
+  
+  geom_sf(data = focus_region, fill = "lightblue", color = "gray30", size = 0.3) +
+  
+  geom_point(data = locations_2018,
+             aes(x = longitude, y = latitude, ),
+             alpha = 0.6, color = "#440154") +
+            # each country gets a different 
+
+  geom_point(data = raw_sst_2018, 
+             aes(x = lon, y = lat),
+             alpha = 0.01, color = "green")+
+  
+  
+  scale_size_continuous(name = "Number of\nObservations", 
+                        range = c(0.5, 5),
+                        breaks = c(10, 25, 50, 75, 100, 150, 200)) +
+  
+  # Specify region of focus - Kenya in frame
+  coord_sf(xlim = c(36, 49), ylim = c(1, -15)) + 
+  
+  labs(title = "Marine Survey Sites in Kenya",
+       subtitle = "Point size represents number of fish observations per site",
+       x = "Longitude", y = "Latitude") +
+  
+  theme_minimal() +
+  theme(panel.grid.major = element_line(color = "gray90", size = 0.2),
+        panel.background = element_rect(fill = "aliceblue"),
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "right")
+
+print(map_plot_2018)
+```
+
+### Match Quality Histogram 2018
+
+```{r}
+#| label: plot-match-quality
+#| fig-width: 10
+#| fig-height: 6
+
+locations_with_sst_2018 %>%
+  filter(!is.na(cell_distance_km)) %>%
+  ggplot(aes(x = cell_distance_km)) +
+  geom_histogram(bins = 30, fill = "coral", alpha = 0.7) +
+  labs(
+    title = "Distribution of Spatial Match Distances",
+    subtitle = "Distance between survey location and nearest chlorophyll-a grid cell",
+    x = "Distance (km)",
+    y = "Count"
+  ) +
+  theme_minimal()
+```

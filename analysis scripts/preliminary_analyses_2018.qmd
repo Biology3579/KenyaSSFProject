@@ -1,0 +1,86 @@
+---
+title: "preliminary_analyses_2018"
+format: html
+editor: visual
+---
+
+
+# set up...
+etc. 
+
+# 2018 data (to do)
+
+## Load data
+
+Using 2018 dataset
+
+```{r}
+#| label: load data
+#| echo: false
+#| warning: false
+#| message: false
+
+fish_data_2018 <- readr::read_rds(here::here("processed_data", "clean_fish_2018.rds"))
+location_2018 <- readr::read_rds(here::here("processed_data", "clean_location_2018.rds"))
+
+
+```
+
+## Exploring the data
+
+```{r}
+
+#| label: explore data
+#| echo: false
+#| warning: false
+#| message: false
+# Overview of the data
+head(fish_data_2018) # see first three rows
+str(fish_data_2018) #structure of data
+summary(fish_data_2018) #summary of data
+
+
+```
+
+## Biomass
+
+This is ...
+
+## Mean Biomass per site
+
+This is the average of the weight of all individuals per unit area
+
+To do this we must find the mean of across the station transects
+
+```{r}
+#libraries
+library(dplyr)
+
+# find the mean per station first
+station_mean <- fish_data_2018 %>%
+  group_by(station) %>%
+  summarise(
+    station_mean = mean(total_wt_g, na.rm = TRUE),
+    site = first(site),
+    country = first(country),
+    .groups = "drop"
+  ) %>% 
+  left_join(
+    location_2018 %>%
+      dplyr::select(station, latitude, longitude),
+    by = "station"
+  )
+
+#then find the site mean
+site_mean <- station_mean %>%
+  group_by(site) %>%
+  summarise(
+    site_mean = mean(station_mean, na.rm = TRUE),
+    latitude = mean(latitude, na.rm = TRUE),
+    longitude = mean(longitude, na.rm = TRUE),
+    country = first(country),
+    .groups = "drop"
+  )
+
+```
+

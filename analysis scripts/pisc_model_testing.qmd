@@ -1,0 +1,717 @@
+---
+title: "pisc_model_testing"
+format: html
+editor: visual
+---
+---
+title: "tot_biomass_model_testing"
+format: html
+editor: visual
+---
+
+# Overview
+
+This document explores the relationship between human gravity and fish biomass
+
+# R Set-up
+
+*Important note: Comprehensive instructions, including all prerequisites and detailed guidelines for running this analysis and relevant code, are available in the README file of my [GitHub repository](...) for this project. Please refer to the README ... to ensure proper setup and usage.*
+
+```{r}
+options(scipen = 999)
+```
+
+```{r}
+#| label: renv-restore
+# renv::restore()
+```
+
+
+Use the renv::restore() to load up the necessary package versions along with the necessary dependencies.
+
+```{r}
+#| label: r set-up
+#| echo: false
+#| include: false
+
+#Load require libraries
+library(tidyverse)
+library(sf)
+library(arm)
+library(here)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggfortify) # extends ggplot2 for some more ease with stats
+library(MASS) # fits regression models etc.
+library(MuMIn) # multi-model inference (AIC etc.)
+library(AICcmodavg)
+library(DHARMa)
+library(tweedie)
+library(glmmTMB)
+library(statmod)
+```
+
+## Load data
+
+```{r}
+#| label: load-data
+
+fish_2009 <- readr::read_rds(here::here("processed_data", "clean_fish_2009.rds"))
+location_2009 <- readr::read_rds(here::here("processed_data", "clean_location_2009.rds"))
+gravity_2009 <- readr::read_rds(here::here("city_data", "locations_with_grav_combined.rds"))
+gravity_2009_2 <- readr::read_rds(here::here("city_data", "locations_with_grav.rds"))
+old_grav_2009 <- read.csv(here::here("processed_data", "locations_with_gravity.csv"))
+chla_2009 <- read.csv(here::here("processed_data", "locations_with_chla_2009.csv"))
+sst_2009 <- read.csv(here::here("processed_data", "locations_with_sst_2009.csv"))
+dhw_2009 <- readr::read_rds(here::here("processed_data", "locations_with_dhw_2009.rds"))
+rugosity_2009 <- readr::read_rds(here::here("processed_data", "clean_dive_details_2009.rds"))
+```
+
+# Piscivore biomass
+
+Including zeros:
+
+```{r}
+piscivore_data <- fish_2009 %>%
+  group_by(site, station, ts_no, date) %>%
+  summarise(
+    transect_pisc_biomass = sum(
+      ifelse(trophic_group == "piscivores", tot_wt_g, 0),
+      na.rm = TRUE
+    ),
+    country = first(country),
+    .groups = "drop"
+  ) %>%
+  group_by(site) %>%
+  filter(n() >= 3) %>%
+  ungroup() %>%
+  filter(
+    country != "kenya",
+    !site %in% c("fernauvloso", "paradise")
+  ) %>%
+  mutate(
+    country = as.factor(country),
+    site = as.factor(site)
+  )
+```
+
+```{r}
+summary(piscivore_data)
+
+zeros <- mean(piscivore_data$transect_pisc_biomass == 0, na.rm = TRUE)
+cat("Proportion of zeros:", zeros, "\n")
+
+( pisc_hist <- ggplot(piscivore_data, aes(x = transect_pisc_biomass)) +
+  geom_histogram(bins = 50) +
+  labs(
+    x = "Piscivore biomass per transect",
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+
+
+log-transformation:
+
+```{r}
+piscivore_data <- piscivore_data %>%
+  mutate(
+    log_pisc_biomass = log(transect_pisc_biomass + 0.01),
+    sqrt_pisc_biomass = sqrt(transect_pisc_biomass + 0.01))
+
+
+(log_biomass_hist <-ggplot(piscivore_data, aes(x = log_pisc_biomass)) +
+  geom_histogram(bins = 30) +
+  labs(
+    x = "Log-transformed biomass",
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+(sqrt_biomass_hist <-ggplot(piscivore_data, aes(x = sqrt_pisc_biomass)) +
+  geom_histogram(bins = 30) +
+  labs(
+    x = "Sqrt-transformed biomass",
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+Despite having a few outliers, the log transform is better here.
+
+### Calculate gravity means per site
+
+The gravity values were calculated for each station - as these were the reef sampling locations that were geo-referenced in the data. This code aggregates human‐gravity metrics to the site level by calculating mean values of the stations (excluding missing data) for each variable within sites. Note that the gravity metrics are the updated metrics from 2009, and the old gravity refers to the market gravity extracted from \[site\]. All the metrics are then combined into a table for ease of use.
+
+```{r}
+#| label: calculate-env-var-means
+
+# Calculate mean human gravity per site
+gravity_2009_sites <- gravity_2009 %>%
+  st_drop_geometry() %>%
+  group_by(site) %>%
+  summarise(
+    market_gravity = mean(market_grav, na.rm = TRUE),
+    settlement_tot_pop = mean(settlement_tot_pop, na.rm = TRUE),
+    nearest_pop_grav = mean(nearest_pop75_grav, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Calculate mean human gravity per site
+old_grav_2009_sites <- old_grav_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    old_gravity = mean(Grav_tot),
+    .groups = "drop"
+  )
+
+# Combine gravity metrics
+gravity_metrics_2009 <- gravity_2009_sites %>%
+  left_join(old_grav_2009_sites, by = "site")
+
+# Model data:
+grav_model_data <- piscivore_data %>%
+  left_join(gravity_metrics_2009, by = "site")
+```
+
+# Human gravity
+
+## Correlation matrix
+```{r}
+grav_vars <- grav_model_data %>% 
+  dplyr::select(market_gravity, settlement_tot_pop, nearest_pop_grav)
+
+# Correlation matrix
+cor_matrix <- cor(grav_vars, use = "complete.obs")
+cor_matrix
+
+# Visualise
+library(corrplot)
+corrplot(cor_matrix, method = "color", type = "lower")
+
+```
+
+
+```{r}
+grav_model_data <- grav_model_data %>%
+  mutate(
+    log_market_gravity = log(market_gravity),
+    log_nearest_pop_grav = log(nearest_pop_grav),
+    log_settlement_tot_pop = log(settlement_tot_pop),
+
+    log_market_gravity_sc = as.numeric(scale(log_market_gravity)),
+    log_nearest_pop_grav_sc = as.numeric(scale(log_nearest_pop_grav)),
+    log_settlement_tot_pop_sc = as.numeric(scale(log_settlement_tot_pop))
+  )
+
+```
+
+```{r}
+# Gaussian (we use glm so it's likelihood-based)
+pisc_glm_gaussian <- glmmTMB::glmmTMB(transect_pisc_biomass ~ log_nearest_pop_grav_sc + (1|site),
+                 family = gaussian(link = "identity"),
+                 data = grav_model_data)
+summary(pisc_glm_gaussian)
+
+# Gaussian (we use glm so it's likelihood-based)
+log_pisc_glm_gaussian <- glmmTMB::glmmTMB(log_pisc_biomass ~ log_nearest_pop_grav_sc + (1|site),
+                 family = gaussian(link = "identity"),
+                 data = grav_model_data)
+summary(log_pisc_glm_gaussian)
+```
+
+```{r}
+pisc_glm_tweedie <- glmmTMB::glmmTMB(transect_pisc_biomass ~ log_nearest_pop_grav_sc + (1|site),
+                 family = glmmTMB::tweedie(link = "log"),
+                 data = grav_model_data)
+summary(pisc_glm_tweedie)
+
+grav_model_data$nearest_pop_grav_sc <- scale(grav_model_data$nearest_pop_grav)
+
+pisc_glm_tweedie_2 <- glmmTMB::glmmTMB(transect_pisc_biomass ~ nearest_pop_grav_sc + (1|site),
+                 family = glmmTMB::tweedie(link = "log"),
+                 data = grav_model_data)
+summary(pisc_glm_tweedie_2)
+```
+
+```{r}
+library(splines)
+
+pisc_glm_tweedie_splin <- glmmTMB::glmmTMB(
+  transect_pisc_biomass ~ ns(log_nearest_pop_grav_sc, df = 3) + (1|site),
+  family = glmmTMB::tweedie(link = "log"),
+  data = grav_model_data
+)
+summary(pisc_glm_tweedie_splin)
+```
+```{r}
+library(mgcv)
+
+grav_model_data$site <- factor(grav_model_data$site)
+
+gam_model <- gam(
+  transect_pisc_biomass ~ s(log_nearest_pop_grav_sc, k = 3) + s(site, bs = "re"),
+  family = tw(link = "log"),
+  method = "REML",
+  data = grav_model_data
+)
+
+summary(gam_model)
+```
+
+```{r}
+plot(gam_model, pages = 1)
+plot(gam_model, pages = 1, shade = TRUE)
+
+plot(gam_model, select = 1, shade = TRUE)
+
+plot(log(transect_pisc_biomass + 1) ~ log_nearest_pop_grav_sc, data=grav_model_data)
+
+remove.packages("dplyr")
+install.packages("dplyr")
+install.packages("gratia")
+
+```
+
+
+
+
+
+```{r}
+library(DHARMa)
+
+# Gaussian model
+res_gaussian <- simulateResiduals(log_pisc_glm_gaussian, n = 1000)
+
+# Tweedie model
+res_tweedie <- simulateResiduals(pisc_glm_tweedie, n = 1000)
+res_tweedie_2 <- simulateResiduals(pisc_glm_tweedie_2, n = 1000)
+
+
+plot(res_gaussian)
+plot(res_tweedie)
+plot(res_tweedie_2)
+```
+
+Hmmm it seems a little bit non-linear but maybe the tweedie model is ok?
+
+
+
+```{r}
+mg_glmer <- glmer(transect_pisc_biomass ~ log_market_gravity_sc + (1|site),  family = Gamma(link = "log"),
+  data = grav_model_data)
+
+summary(mg_glmer)
+
+mg_glmer2 <- glmer(transect_pisc_biomass ~ log_market_gravity_sc + (1|site),  family = gaussian(link = "log"),
+  data = grav_model_data)
+
+summary(mg_glmer2)
+
+st_glmer <- glmer(transect_biomass ~ log_settlement_tot_pop_sc+ (1|site),  family = Gamma(link = "log"),
+  data = grav_model_data)
+
+summary(st_glmer)
+
+sg_glmer <- glmer(transect_biomass ~ log_nearest_pop_grav_sc + (1|site),  family = Gamma(link = "log"),
+  data = grav_model_data)
+
+summary(sg_glmer)
+
+```
+
+```{r}
+grav_metric_models <- list(mg_glmer, st_glmer, sg_glmer)
+aictab(grav_metric_models)
+
+anova(mg_glmer, st_glmer, sg_glmer)
+```
+
+```{r}
+ggplot(grav_model_data, aes(x = log_nearest_pop_grav_sc, y = transect_biomass)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "glm", method.args = list(family = Gamma(link = "log"))) +
+  scale_y_log10() +
+  theme_bw() +
+  labs(
+    x = "Scaled log population gravity",
+    y = "Transect biomass"
+  )
+```
+
+# Chlorophyll a 
+
+```{r}
+# Calculate mean chlorophyll per site
+chla_2009_sites <- chla_2009 %>%
+  group_by(site) %>%
+  summarise(
+    mean_annual_chla = mean(chla_annual_mean, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Join chlorophyll to biomass model data
+chla_model_data <- ts_biomass_data %>%
+  left_join(chla_2009_sites, by = "site")
+```
+
+```{r}
+# Overview of the data
+summary(chla_model_data)
+
+# Histogram 
+( chla_hist <- ggplot(chla_model_data, aes(x = mean_annual_chla)) +
+  geom_histogram(bins = 30) +
+  labs(
+    x = expression("Mean Annual Chlorophyll-a"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+# Boxcox 
+boxcox(lm(mean_annual_chla ~ 1, data = chla_model_data),
+       lambda = seq(-2, 2, 0.1))
+```
+
+
+```{r}
+
+# Scale the data 
+chla_model_data <- chla_model_data %>%
+  mutate(
+    log_chla = log(mean_annual_chla),
+    log_chla_sc = as.numeric(scale(log_chla))
+  )
+
+chla_glmer <- glmer(
+  transect_biomass ~ log_chla_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = chla_model_data
+)
+
+summary(chla_glmer)
+
+```
+
+```{r}
+ggplot(chla_model_data, aes(x = log_chla_sc, y = transect_biomass)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "glm",
+              method.args = list(family = Gamma(link = "log")),
+              se = TRUE) +
+  scale_y_log10() +
+  labs(
+    x = "Chlorophyll-a",
+    y = "Transect biomass (log scale)"
+  ) +
+  theme_bw()
+
+```
+
+
+# SST 
+
+```{r}
+# Calculate mean chlorophyll per site
+sst_2009_sites <- sst_2009 %>%
+  group_by(site) %>%
+  summarise(
+    mean_annual_sst = mean(sst_annual_mean, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Join chlorophyll to biomass model data
+sst_model_data <- ts_biomass_data %>%
+  left_join(sst_2009_sites, by = "site")
+
+```
+
+```{r}
+# Overview of the data
+summary(sst_model_data)
+
+# Histogram 
+( sst_hist <- ggplot(sst_model_data, aes(x = mean_annual_sst)) +
+  geom_histogram(bins = 30) +
+  labs(
+    x = expression("Total biomass in a transect"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+
+
+```{r}
+
+# Scale the data 
+sst_model_data <- sst_model_data %>%
+  mutate(
+    sst_sc = as.numeric(scale(mean_annual_sst))
+  )
+
+sst_glmer <- glmer(
+  transect_biomass ~ sst_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = sst_model_data
+)
+
+summary(sst_glmer)
+
+```
+
+```{r}
+ggplot(sst_model_data, aes(x = sst_sc, y = transect_biomass)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "glm",
+              method.args = list(family = Gamma(link = "log")),
+              se = TRUE) +
+  scale_y_log10() +
+  labs(
+    x = "Sea Surface Temperature",
+    y = "Transect biomass (log scale)"
+  ) +
+  theme_bw()
+
+```
+
+
+# DHW
+
+```{r}
+
+# Calculate mean dhw per site
+dhw_2009_sites <- dhw_2009 %>% 
+  group_by(site) %>% 
+  summarise(
+    mean_max_dhw = mean(max_dhw),
+    .groups = "drop"
+  )
+
+# # Join chlorophyll to biomass model data
+dhw_model_data <- ts_biomass_data %>%
+  left_join(dhw_2009_sites, by = "site")
+```
+
+```{r}
+
+# Overview of the data
+summary(dhw_model_data)
+
+# Histogram 
+( dhw_hist <- ggplot(dhw_model_data, aes(x = mean_max_dhw)) +
+  geom_histogram(bins = 30) +
+  labs(
+    x = expression("Total biomass in a transect"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+```
+
+
+```{r}
+dhw_model_data <- dhw_model_data %>%
+  mutate(
+    dhw_log = log(mean_max_dhw + 0.01),
+    dhw_log_sc = scale(dhw_log)
+  )
+
+dhw_glmer <- glmer(
+  transect_biomass ~ dhw_log_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = dhw_model_data
+)
+
+summary(dhw_glmer)
+```
+
+```{r}
+ggplot(dhw_model_data, aes(x = dhw_log_sc, y = transect_biomass)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "glm",
+              method.args = list(family = Gamma(link = "log")),
+              se = TRUE) +
+  scale_y_log10() +
+  labs(
+    x = "Cumulative Thermal Stress (degree-heating weeks)",
+    y = "Transect biomass (log scale)"
+  ) +
+  theme_bw()
+
+```
+
+```{r}
+temp_metric_models <- list(sst_glmer, dhw_glmer)
+aictab(temp_metric_models)
+```
+# Rugosity
+
+```{r}
+# Select rugosity per site
+rugosity_2009_sites <- rugosity_2009 %>%
+  group_by(site) %>%
+  summarise(rugosity = mean(rugosity), .groups = "drop")
+
+# Join chlorophyll to biomass model data
+rugosity_model_data <- ts_biomass_data %>%
+  left_join(rugosity_2009_sites, by = "site")
+```
+
+```{r}
+# Overview of the data
+summary(rugosity_model_data)
+
+# Histogram 
+( rugosity_hist <- ggplot(rugosity_model_data, aes(x = rugosity)) +
+  geom_histogram(bins = 30) +
+  labs(
+    x = expression("Total biomass in a transect"),
+    y = "Frequency"
+  ) +
+  theme_bw() )
+
+```
+```{r}
+
+# Scale the data 
+sst_model_data <- rugosity_model_data %>%
+  mutate(
+    rugosity_sc = as.numeric(scale(rugosity))
+  )
+
+rugosity_glmer <- glmer(
+  transect_biomass ~ rugosity + (1 | site),
+  family = Gamma(link = "log"),
+  data = rugosity_model_data
+)
+
+summary(rugosity_glmer)
+
+rugosity_glmer_sc <- glmer(
+  transect_biomass ~ rugosity_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = rugosity_model_data
+)
+
+summary(rugosity_glmer_sc)
+
+rugosity_glmer_cat <- glmer(
+  transect_biomass ~ factor(rugosity) + (1 | site),
+  family = Gamma(link = "log"),
+  data = rugosity_model_data
+)
+
+summary(rugosity_glmer_cat)
+
+
+```
+```{r}
+
+ggplot(rugosity_model_data, aes(x = rugosity, y = transect_biomass)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(
+    method = "glm",
+    method.args = list(family = Gamma(link = "log")),
+    se = TRUE
+  ) +
+  scale_y_log10() +
+  labs(
+    x = "Rugosity",
+    y = "Transect biomass (log scale)"
+  ) +
+  theme_bw()
+
+```
+
+
+
+```{r}
+rugosity_models <- list(rugosity_glmer, rugosity_glmer_cat)
+aictab(rugosity_models)
+```
+Keep the continuous one - its ordinal!
+
+
+# Multivariate model
+
+```{r}
+full_model_data <- ts_biomass_data %>%
+  left_join(gravity_2009_sites, by = "site") %>%
+  left_join(chla_2009_sites, by = "site") %>%
+  left_join(sst_2009_sites, by = "site") %>%
+  left_join(rugosity_2009_sites, by = "site")
+
+
+full_model_data <- full_model_data %>%
+  mutate(
+    # gravity
+    log_market_gravity_sc = scale(log(market_gravity)),
+    log_nearest_pop_grav_sc = scale(log(nearest_pop_grav)),
+
+    # chla
+    log_chla_sc = scale(log(mean_annual_chla)),
+
+    # sst
+    sst_sc = scale(mean_annual_sst),
+    
+    #rugosity
+     rugosity_sc = scale(rugosity)
+  )
+```
+
+
+## Correlation matrix
+```{r}
+vars <- full_model_data %>%
+  dplyr::select(rugosity_sc, log_chla_sc, sst_sc, log_nearest_pop_grav_sc)
+
+cor(vars, use = "complete.obs")
+
+```
+```{r}
+
+m0 <- glmer(
+  transect_biomass ~ 1 + (1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+m1 <- glmer(
+  transect_biomass ~ rugosity + log_nearest_pop_grav_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+m2 <- glmer(
+  transect_biomass ~ rugosity + sst_sc +(1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+m3 <- glmer(
+  transect_biomass ~ rugosity + log_chla_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+m4 <- glmer(
+  transect_biomass ~ rugosity + log_nearest_pop_grav_sc + sst_sc +(1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+m5 <- glmer(
+  transect_biomass ~ rugosity + log_nearest_pop_grav_sc + log_chla_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+m6 <- glmer(
+  transect_biomass ~ rugosity + log_nearest_pop_grav_sc + sst_sc + log_chla_sc + (1 | site),
+  family = Gamma(link = "log"),
+  data = full_model_data
+)
+
+aictab(list(m0, m1, m2, m3, m4, m5, m6))
+
+
+```

@@ -1,0 +1,178 @@
+---
+title: "eucl_connectivity_metric"
+format: html
+---
+
+```{r}
+#Load libraries 
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(maps)
+library(sf)
+library(RColorBrewer)
+
+```
+
+
+```{r}
+# compute distance in metres between two points (lat/lon)
+coord_distance <- function(lat1, lon1, lat2, lon2) {
+  # ensure s2 is on
+  sf::sf_use_s2(TRUE)
+
+  # number of entries
+  n <- length(lat2)
+
+  # repeat reference coordinates if needed
+  if (length(lat1) == 1) lat1 <- rep(lat1, n)
+  if (length(lon1) == 1) lon1 <- rep(lon1, n)
+
+  # result vector
+  distances <- numeric(n)
+
+  # loop element-wise
+  for (i in seq_len(n)) {
+
+    p1 <- st_sfc(st_point(c(lon1[i], lat1[i])), crs = 4326)
+    p2 <- st_sfc(st_point(c(lon2[i], lat2[i])), crs = 4326)
+
+    # st_distance returns a units object; convert to numeric
+    distances[i] <- as.numeric(st_distance(p1, p2))
+  }
+
+  distances
+}
+```
+
+
+
+```{r}
+locations_2009 <- read_rds(here::here("processed_data", "clean_location_2009.rds"))
+
+locations_2009 <- locations_2009 %>%
+  mutate(
+    cluster_id = 0
+  )
+```
+
+```{r}
+next_id <- 1
+n <- nrow(locations_2009)
+distance <- 40000
+
+
+for (i in 1:(n-1)) {
+  for (j in (i + 1):n) {
+    
+    # assign a cluster to i if it doesn't have one
+    if (locations_2009$cluster_id[i] == 0) {
+      locations_2009$cluster_id[i] <- next_id
+      next_id <- next_id + 1
+    }
+    
+    lat1 <- locations_2009$latitude[i]
+    lon1 <- locations_2009$longitude[i]
+    lat2 <- locations_2009$latitude[j]
+    lon2 <- locations_2009$longitude[j]
+    
+    if (coord_distance(lat1, lon1, lat2, lon2) <= distance) {
+      
+      if (locations_2009$cluster_id[j] == 0) {
+        locations_2009$cluster_id[j] <- locations_2009$cluster_id[i]
+      }
+      else{
+        locations_2009$cluster_id[locations_2009$cluster_id == locations_2009$cluster_id[j]] <- locations_2009$cluster_id[i]
+      }
+    }
+    
+    
+  }
+}
+
+if (locations_2009$cluster_id[n] == 0){
+  locations_2009$cluster_id[n] <- next_id
+}
+
+
+```
+
+```{r}
+
+
+coord_distance(-12.828683, 49.81375, -6.279933, 39.17395) <= distance
+```
+
+---
+title: "eucl_connectivity_metric"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(maps)
+library(sf)
+library(igraph)
+library(RColorBrewer)
+library(here)
+```
+
+```{r}
+# Compute geodesic distance in metres between two points (lat/lon)
+coord_distance <- function(lat1, lon1, lat2, lon2) {
+  sf::sf_use_s2(TRUE)
+  n <- length(lat2)
+  if (length(lat1) == 1) lat1 <- rep(lat1, n)
+  if (length(lon1) == 1) lon1 <- rep(lon1, n)
+  distances <- numeric(n)
+  for (i in seq_len(n)) {
+    p1 <- st_sfc(st_point(c(lon1[i], lat1[i])), crs = 4326)
+    p2 <- st_sfc(st_point(c(lon2[i], lat2[i])), crs = 4326)
+    distances[i] <- as.numeric(st_distance(p1, p2))
+  }
+  distances
+}
+```
+
+```{r}
+locations_2009 <- read_rds(here::here("processed_data", "clean_location_connectivity.rds"))
+```
+
+```{r}
+# ── SPATIAL CLUSTERING ────────────────────────────────────────
+# Single-linkage clustering via graph connected components.
+# Sites within distance_threshold of any other site in the
+# cluster share a cluster ID.
+
+distance_threshold <- 15000  # metres — change to test other distances
+
+coords <- locations_2009 %>%
+  dplyr::select(site, latitude, longitude)
+
+# All pairwise distances
+dist_mat <- outer(
+  seq_len(nrow(coords)),
+  seq_len(nrow(coords)),
+  Vectorize(function(i, j) {
+    coord_distance(
+      coords$latitude[i], coords$longitude[i],
+      coords$latitude[j], coords$longitude[j]
+    )
+  })
+)
+
+# Adjacency matrix — TRUE if within threshold
+adj_mat <- dist_mat <= distance_threshold
+diag(adj_mat) <- FALSE
+
+# Connected components = clusters
+g <- graph_from_adjacency_matrix(adj_mat, mode = "undirected")
+locations_2009$cluster_id <- components(g)$membership
+
+# Summary
+cat("Distance threshold:", distance_threshold / 1000, "km\n")
+cat("Number of clusters:", max(locations_2009$cluster_id), "\n")
+cat("Cluster sizes:\n")
+print(table(locations_2009$cluster_id))
+```
